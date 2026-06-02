@@ -331,3 +331,34 @@ def test_full_pipeline_via_load(tmp_path):
     rgb, alpha = imageio.load_rgb(inp)
     out = core.apply(rgb, pal, core.Options(mode="nearest"))
     assert out.shape == rgb.shape and alpha is None
+
+
+# --- cli -------------------------------------------------------------------
+
+def test_cli_default_output_name(tmp_path):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = tmp_path / "photo.jpeg"
+    Image.fromarray((_img() * 255).astype(np.uint8), "RGB").save(inp)
+
+    result = CliRunner().invoke(main, [str(inp), "-p", '["#000000","#ffffff"]'])
+    assert result.exit_code == 0, result.output
+    # Written next to the input as paletti-<stem>.png, regardless of input ext.
+    expected = tmp_path / "paletti-photo.png"
+    assert expected.exists()
+    assert str(expected) in result.output
+
+
+def test_cli_explicit_output_name(tmp_path):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = tmp_path / "in.png"
+    Image.fromarray((_img() * 255).astype(np.uint8), "RGB").save(inp)
+    out = tmp_path / "custom.png"
+
+    result = CliRunner().invoke(main, [str(inp), str(out), "-p", '["#000000","#ffffff"]'])
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    assert not (tmp_path / "paletti-in.png").exists()

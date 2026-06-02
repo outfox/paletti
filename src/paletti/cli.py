@@ -27,7 +27,8 @@ def _parse_triplet(ctx, param, value):
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("input_image", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.argument("output_image", type=click.Path(dir_okay=False, path_type=Path))
+@click.argument("output_image", required=False, default=None,
+                type=click.Path(dir_okay=False, path_type=Path))
 @click.option("-p", "--palette", "palette_spec", required=True, metavar="SPEC",
               help="Palette source: an image path, a .json file, or an inline "
                    "JSON array such as '[\"#1a1c2c\",\"#5d275d\"]'.")
@@ -92,12 +93,18 @@ def main(input_image, output_image, palette_spec, mode, metric, smooth,
          prefer_smallest, hsv_weights, hsv_adjust):
     """Apply a colour PALETTE to an image.
 
+    If OUTPUT_IMAGE is omitted, the result is written next to the input as
+    "paletti-<input-name>.png".
+
     \b
     Examples:
-      paletti in.png out.png -p palette.png
+      paletti in.png -p palette.png            # -> paletti-in.png
       paletti in.png out.png -p sweetie16.json -m dither --dither bayer
       paletti in.png out.png -p '[[26,28,44],[93,39,93]]' -m blend
     """
+    if output_image is None:
+        output_image = input_image.with_name(f"paletti-{input_image.stem}.png")
+
     try:
         pal = palette_mod.load(
             palette_spec, max_colors=max_colors, assume_range=palette_range

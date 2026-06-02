@@ -18,8 +18,11 @@ uv run paletti --help
 ## Usage
 
 ```sh
-paletti INPUT OUTPUT -p PALETTE [options]
+paletti INPUT [OUTPUT] -p PALETTE [options]
 ```
+
+If `OUTPUT` is omitted, the result is written next to the input as
+`paletti-<input-name>.png` (e.g. `paletti in.png -p pal.png` → `paletti-in.png`).
 
 The palette (`-p` / `--palette`) can be:
 
