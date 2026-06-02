@@ -14,8 +14,10 @@ import numpy as np
 
 from . import color, dither
 
-# Render modes (see the shader's ``renderMode`` switch).
-MODES = ("nearest", "second", "factor", "blend", "dither")
+# Render modes (see the shader's ``renderMode`` switch). ``dither-rgb`` is an
+# addition: ordered dither applied to each RGB channel independently before
+# snapping to the palette, rather than dithering along the two-nearest line.
+MODES = ("nearest", "second", "factor", "blend", "dither", "dither-rgb")
 
 # Distance metrics for matching a pixel to a palette colour.
 METRICS = ("rgb", "hsv")
@@ -27,6 +29,7 @@ DITHER_KINDS = ("nearest", "sine", "bayer", "halftone", "texture")
 class Options:
     mode: str = "nearest"
     metric: str = "rgb"
+    pre_blur: float = 0.0
     hsv_weights: tuple[float, float, float] = (1.0, 1.0, 1.0)
     hsv_adjust: tuple[float, float, float] = (0.0, 1.0, 1.0)
     dither_kind: str = "bayer"
@@ -34,6 +37,8 @@ class Options:
     bayer_size: int = 4
     halftone_angle: float = 45.0
     dither_scale: float = 1.0
+    dither_softness: float = 0.0
+    dither_strength: float = 1.0
     dither_texture: np.ndarray | None = None
     prefer_smallest: bool = False
 
@@ -110,6 +115,83 @@ def _abc_lerp(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
     return np.clip(t, 0.0, 1.0)
 
 
+def _gaussian_blur(image: np.ndarray, sigma: float) -> np.ndarray:
+    """Separable Gaussian blur of an ``(H, W, C)`` float image.
+
+    Used as an optional pre-pass: smoothing the source before matching keeps the
+    per-pixel choice of palette colours (and the blend factor) spatially
+    coherent, which suppresses the sharp pixel-sized speckle that source noise
+    otherwise produces near palette-colour boundaries.
+    """
+    if sigma <= 0.0:
+        return image
+    radius = max(1, int(round(sigma * 3.0)))
+    xs = np.arange(-radius, radius + 1)
+    kernel = np.exp(-(xs * xs) / (2.0 * sigma * sigma))
+    kernel /= kernel.sum()
+
+    def conv(arr: np.ndarray, axis: int) -> np.ndarray:
+        pad = [(0, 0)] * arr.ndim
+        pad[axis] = (radius, radius)
+        padded = np.pad(arr, pad, mode="edge")
+        n = arr.shape[axis]
+        out = np.zeros_like(arr)
+        for i, weight in enumerate(kernel):
+            sl = [slice(None)] * arr.ndim
+            sl[axis] = slice(i, i + n)
+            out += weight * padded[tuple(sl)]
+        return out
+
+    return conv(conv(image, 0), 1)
+
+
+def _make_field(opts: Options, h: int, w: int) -> np.ndarray:
+    """Build the flat ``(H*W,)`` dither field selected by ``opts``."""
+    return dither.dither_field(
+        opts.dither_kind, h, w,
+        res=opts.dither_res, matrix_size=opts.bayer_size,
+        angle_deg=opts.halftone_angle, scale=opts.dither_scale,
+        texture=opts.dither_texture,
+    ).reshape(-1)
+
+
+def _make_field_rgb(opts: Options, h: int, w: int) -> np.ndarray:
+    """Return an ``(H*W, 3)`` per-channel dither field for ``dither-rgb``.
+
+    If the dither texture is genuinely RGB (its channels actually differ), each
+    of its R/G/B channels drives the matching image channel. Otherwise a single
+    field is reused, rotated by 1/3 per channel to decorrelate the noise.
+    """
+    if opts.dither_kind == "texture" and opts.dither_texture is not None:
+        tex = np.asarray(opts.dither_texture, dtype=np.float64)
+        if tex.ndim == 3 and tex.shape[-1] >= 3:
+            rgb = tex[..., :3]
+            if rgb.max() > 1.0:
+                rgb = rgb / 255.0
+            # Treat as colour only if some pixel has a real channel spread.
+            if float(np.ptp(rgb, axis=-1).max()) > 1e-3:
+                field = dither.texture_field(h, w, rgb, scale=opts.dither_scale)
+                return field.reshape(-1, 3)
+
+    field = _make_field(opts, h, w)
+    phases = np.array([0.0, 1.0 / 3.0, 2.0 / 3.0])
+    return (field[:, None] + phases[None, :]) % 1.0
+
+
+def _mean_palette_gap(palette: np.ndarray) -> float:
+    """Mean distance from each palette colour to its nearest neighbour.
+
+    Used to auto-scale the per-channel dither amplitude so it spans roughly the
+    spacing between adjacent palette colours regardless of palette density.
+    """
+    if palette.shape[0] < 2:
+        return 0.0
+    diff = palette[:, None, :] - palette[None, :, :]
+    dist = np.sqrt(np.einsum("ijc,ijc->ij", diff, diff))
+    np.fill_diagonal(dist, np.inf)
+    return float(dist.min(axis=1).mean())
+
+
 def apply(image: np.ndarray, palette: np.ndarray, opts: Options) -> np.ndarray:
     """Apply ``palette`` to ``image``.
 
@@ -121,8 +203,33 @@ def apply(image: np.ndarray, palette: np.ndarray, opts: Options) -> np.ndarray:
         raise ValueError("palette is empty")
 
     h, w = image.shape[:2]
-    rgb = color.hsv_adjust(image, opts.hsv_adjust)
+    base = _gaussian_blur(image, opts.pre_blur)
+    rgb = color.hsv_adjust(base, opts.hsv_adjust)
     pixels = rgb.reshape(-1, 3)
+
+    if opts.mode == "dither-rgb":
+        # Ordered-dither each RGB channel on its own: add a per-channel
+        # threshold offset to the pixel, then snap to the nearest palette
+        # colour. The three channels use the same field rotated by 1/3 each so
+        # their dither noise is decorrelated.
+        field_rgb = _make_field_rgb(opts, h, w)  # (P, 3) in [0, 1]
+        amp = _mean_palette_gap(palette) * opts.dither_strength
+        offset = (field_rgb - 0.5) * amp
+        perturbed = np.clip(pixels + offset, 0.0, 1.0)
+        ia, ib = _two_nearest(perturbed, palette, opts)
+        a, b = palette[ia], palette[ib]
+        soft = opts.dither_softness
+        if soft <= 0.0:
+            out = a  # hard 1-bit snap to the nearest palette colour
+        else:
+            # Anti-alias the palette boundary: A is nearest iff the projection
+            # ``t`` of the perturbed pixel onto A->B is < 0.5, so smoothstep-
+            # blend A<->B across that bisector over a band of width ``soft``.
+            t = _abc_lerp(a, b, perturbed)
+            x = np.clip((t - 0.5) / soft + 0.5, 0.0, 1.0)
+            blend = (x * x * (3.0 - 2.0 * x))[:, None]
+            out = a + blend * (b - a)
+        return out.reshape(h, w, 3)
 
     idx_a, idx_b = _two_nearest(pixels, palette, opts)
     point_a = palette[idx_a]
@@ -148,14 +255,18 @@ def apply(image: np.ndarray, palette: np.ndarray, opts: Options) -> np.ndarray:
             a = np.where(swap[:, None], point_b, point_a)
             b = np.where(swap[:, None], point_a, point_b)
         t = _abc_lerp(a, b, pixels)
-        field = dither.dither_field(
-            opts.dither_kind, h, w,
-            res=opts.dither_res, matrix_size=opts.bayer_size,
-            angle_deg=opts.halftone_angle, scale=opts.dither_scale,
-            texture=opts.dither_texture,
-        ).reshape(-1)
-        pick = np.floor(t + field)  # 0 -> A, 1 -> B
-        out = np.where(pick[:, None] >= 0.5, b, a)
+        field = _make_field(opts, h, w)
+        # The A/B boundary sits where ``t + field == 1``; ``edge`` is the signed
+        # distance to it (>0 picks B, <0 picks A).
+        edge = t + field - 1.0
+        soft = opts.dither_softness
+        if soft <= 0.0:
+            blend = (edge >= 0.0).astype(np.float64)  # hard 1-bit pick
+        else:
+            # Smoothstep a gradient band of total width ``soft`` across the edge.
+            x = np.clip(edge / soft + 0.5, 0.0, 1.0)
+            blend = x * x * (3.0 - 2.0 * x)
+        out = a + blend[:, None] * (b - a)
     else:  # pragma: no cover - guarded by validate()
         raise ValueError(opts.mode)
 

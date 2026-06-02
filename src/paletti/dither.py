@@ -71,29 +71,48 @@ def _tiled(values: np.ndarray, height: int, width: int, scale: float) -> np.ndar
     return values[np.ix_(ys, xs)]
 
 
-def _resample(arr: np.ndarray, factor: float) -> np.ndarray:
-    """Resize a 2-D array by ``factor`` with wrap-aware bilinear sampling.
+def _sample_wrap(tex: np.ndarray, ys: np.ndarray, xs: np.ndarray) -> np.ndarray:
+    """Bilinearly sample ``tex`` at row coords ``ys`` and column coords ``xs``.
 
-    Wrapping keeps a seamless (tileable) texture seamless after scaling.
-    ``factor`` may be greater or less than 1 (enlarge or shrink).
+    Coordinates wrap around the texture (so it tiles seamlessly). Works for 2-D
+    textures and ``(H, W, C)`` textures alike, preserving the channel axis.
     """
-    if factor == 1.0:
-        return arr
-    h, w = arr.shape
-    nh = max(1, int(round(h * factor)))
-    nw = max(1, int(round(w * factor)))
-    # Map each output pixel centre back to a source coordinate.
-    sy = (np.arange(nh) + 0.5) / factor - 0.5
-    sx = (np.arange(nw) + 0.5) / factor - 0.5
-    y0 = np.floor(sy).astype(int)
-    x0 = np.floor(sx).astype(int)
-    wy = (sy - y0)[:, None]
-    wx = sx - x0
-    y0m, y1m = y0 % h, (y0 + 1) % h
-    x0m, x1m = x0 % w, (x0 + 1) % w
-    top = arr[y0m][:, x0m] * (1 - wx) + arr[y0m][:, x1m] * wx
-    bot = arr[y1m][:, x0m] * (1 - wx) + arr[y1m][:, x1m] * wx
+    th, tw = tex.shape[:2]
+    y0 = np.floor(ys).astype(int)
+    x0 = np.floor(xs).astype(int)
+    wy = ys - y0
+    wx = xs - x0
+    y0m, y1m = y0 % th, (y0 + 1) % th
+    x0m, x1m = x0 % tw, (x0 + 1) % tw
+    if tex.ndim == 3:  # broadcast weights over the trailing channel axis
+        wy, wx = wy[:, None, None], wx[None, :, None]
+    else:
+        wy, wx = wy[:, None], wx[None, :]
+    top = tex[y0m][:, x0m] * (1 - wx) + tex[y0m][:, x1m] * wx
+    bot = tex[y1m][:, x0m] * (1 - wx) + tex[y1m][:, x1m] * wx
     return top * (1 - wy) + bot * wy
+
+
+def texture_field(height: int, width: int, texture: np.ndarray, *,
+                  scale: float = 1.0) -> np.ndarray:
+    """Tile a texture across ``(height, width)``, then zoom it by ``scale``.
+
+    The texture is laid over the image at a 1:1 pixel ratio (one texel per
+    output pixel), repeating to fill the frame; ``scale`` then zooms that tiled
+    field about the origin -- ``2`` makes the pattern twice as large, ``0.5``
+    half. So ``scale == 1.0`` is an exact 1:1 mapping with no interpolation.
+
+    Returns ``(H, W)`` for a 2-D texture or ``(H, W, C)`` preserving channels.
+    Values are normalised to ``[0, 1]``.
+    """
+    tex = np.asarray(texture, dtype=np.float64)
+    if tex.max() > 1.0:
+        tex = tex / 255.0
+    if scale <= 0.0:
+        scale = 1.0
+    ys = np.arange(height) / scale
+    xs = np.arange(width) / scale
+    return _sample_wrap(tex, ys, xs)
 
 
 def dither_field(
@@ -135,10 +154,7 @@ def dither_field(
             raise ValueError("dither kind 'texture' requires a texture array")
         tex = np.asarray(texture, dtype=np.float64)
         if tex.ndim == 3:
-            tex = tex[..., 0]
-        if tex.max() > 1.0:
-            tex = tex / 255.0
-        tex = _resample(tex, scale)
-        return _tiled(tex, height, width, 1.0)
+            tex = tex[..., 0]  # single greyscale field for the standard mode
+        return texture_field(height, width, tex, scale=scale)
 
     raise ValueError(f"unknown dither kind: {kind!r}")

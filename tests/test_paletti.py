@@ -90,14 +90,25 @@ def test_halftone_field_dot_polarity():
     assert f[8, 8] == pytest.approx(1.0)          # cell corner
 
 
-def test_resample_dimensions_and_range():
+def test_texture_field_1to1_tiling_at_scale_one():
+    # At scale 1.0 the texture maps 1:1 onto the image (exact, no interpolation),
+    # repeating to fill it. A 2x2 texture tiled into 4x4 repeats verbatim.
     src = np.array([[0.0, 1.0], [1.0, 0.0]])
-    up = dither._resample(src, 8)
-    assert up.shape == (16, 16)
-    assert 0.0 <= up.min() and up.max() <= 1.0
-    down = dither._resample(np.ones((40, 40)) * 0.5, 0.25)
-    assert down.shape == (10, 10)
-    assert dither._resample(src, 1.0) is src  # no-op fast path
+    f = dither.texture_field(4, 4, src, scale=1.0)
+    assert f.shape == (4, 4)
+    expected = np.tile(src, (2, 2))
+    assert np.array_equal(f, expected)
+
+
+def test_texture_field_scale_zooms_about_origin():
+    # scale 2.0 doubles the feature size (bilinear zoom about the origin). The
+    # even output pixels land exactly on texels, so they reproduce the texture
+    # tiled; the odd ones are the interpolated in-betweens.
+    src = np.array([[0.0, 1.0], [1.0, 0.0]])
+    f = dither.texture_field(8, 8, src, scale=2.0)
+    assert f.shape == (8, 8)
+    assert np.allclose(f[::2, ::2], np.tile(src, (2, 2)))
+    assert f[0, 0] == src[0, 0]  # origin is pinned
 
 
 def test_texture_scale_enlarges_features():
@@ -150,6 +161,119 @@ def test_dither_only_palette_colours():
     out = core.apply(img, pal, core.Options(mode="dither", dither_kind="bayer"))
     allowed = set(map(tuple, pal))
     assert set(map(tuple, np.unique(out.reshape(-1, 3), axis=0))) <= allowed
+
+
+def test_gaussian_blur_reduces_noise_preserves_mean():
+    rng = np.random.default_rng(3)
+    img = np.clip(0.5 + 0.05 * rng.standard_normal((64, 64, 3)), 0, 1)
+    blurred = core._gaussian_blur(img, 1.5)
+    assert blurred.std() < img.std()
+    # 'edge' padding means no border darkening -> mean stays put.
+    assert blurred.mean() == pytest.approx(img.mean(), abs=1e-3)
+    assert core._gaussian_blur(img, 0.0) is img  # no-op fast path
+
+
+def test_pre_blur_reduces_speckle():
+    # A noisy near-boundary flat field produces per-pixel pair flips; smoothing
+    # the source should reduce the number of colour transitions.
+    rng = np.random.default_rng(4)
+    flat = np.clip(np.full((96, 96, 3), 0.5) + 0.03 * rng.standard_normal((96, 96, 3)), 0, 1)
+    pal = np.array([[0.3, 0.3, 0.3], [0.7, 0.7, 0.7], [0.5, 0.5, 0.55]])
+
+    def transitions(sigma):
+        out = core.apply(flat, pal, core.Options(
+            mode="dither", dither_kind="halftone", dither_res=12, pre_blur=sigma))
+        return int(np.sum(np.abs(np.diff(out[..., 0], axis=1)) > 1e-6))
+
+    assert transitions(1.5) < transitions(0.0)
+
+
+def test_dither_softness_introduces_gradient():
+    img = _img()
+    pal = np.array([[0, 0, 0], [1, 1, 1]], dtype=float)
+    sharp = core.apply(img, pal, core.Options(mode="dither", dither_softness=0.0))
+    soft = core.apply(img, pal, core.Options(mode="dither", dither_softness=0.4))
+    # Sharp stays 1-bit; soft introduces intermediate (in-between) colours.
+    assert len(np.unique(sharp.reshape(-1, 3), axis=0)) <= len(pal)
+    assert len(np.unique(soft.reshape(-1, 3), axis=0)) > len(pal)
+    assert soft.min() >= 0.0 and soft.max() <= 1.0
+
+
+def test_dither_rgb_palette_only_and_reduces_banding():
+    pal = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
+                    [1, 1, 0], [1, 1, 1]], dtype=float)
+    h, w = 48, 256
+    xx = np.linspace(0, 1, w)
+    img = np.repeat(np.stack([xx, xx * 0.5, 1 - xx], -1)[None], h, 0)
+
+    near = core.apply(img, pal, core.Options(mode="nearest"))
+    drgb = core.apply(img, pal, core.Options(mode="dither-rgb", dither_kind="bayer"))
+
+    # Output is palette-only (each channel snaps after perturbation).
+    allowed = set(map(tuple, pal))
+    assert set(map(tuple, np.unique(drgb.reshape(-1, 3), axis=0))) <= allowed
+
+    # Local average of the dithered result tracks the gradient far better than
+    # the hard-quantised nearest result (i.e. it dissolves the banding).
+    def avg_err(out):
+        return float(np.mean(np.abs(core._gaussian_blur(out, 2.0) - img)))
+
+    assert avg_err(drgb) < avg_err(near) * 0.5
+
+
+def test_dither_rgb_uses_texture_channels_when_rgb():
+    rng = np.random.default_rng(7)
+    tex = rng.random((8, 8, 3))  # genuinely coloured: channels differ
+    opts = core.Options(mode="dither-rgb", dither_kind="texture",
+                        dither_texture=tex, dither_scale=1.0)
+    field = core._make_field_rgb(opts, 8, 8)
+    expected = dither.texture_field(8, 8, tex, scale=1.0).reshape(-1, 3)
+    assert np.allclose(field, expected)
+    assert not np.allclose(field[:, 0], field[:, 1])  # channels stay distinct
+
+
+def test_dither_rgb_greyscale_texture_falls_back_to_rotation():
+    rng = np.random.default_rng(8)
+    gray3 = np.repeat(rng.random((8, 8))[..., None], 3, axis=2)
+    opts = core.Options(mode="dither-rgb", dither_kind="texture",
+                        dither_texture=gray3, dither_scale=1.0)
+    field = core._make_field_rgb(opts, 8, 8)
+    single = dither.dither_field("texture", 8, 8, texture=gray3[..., 0]).reshape(-1)
+    rotated = (single[:, None] + np.array([0.0, 1 / 3, 2 / 3])[None]) % 1.0
+    assert np.allclose(field, rotated)
+
+
+def test_texture_field_preserves_channels():
+    tex = np.dstack([np.zeros((4, 4)), np.ones((4, 4)), np.full((4, 4), 0.5)])
+    f = dither.texture_field(8, 8, tex, scale=1.0)
+    assert f.shape == (8, 8, 3)
+    assert f[..., 0].max() == 0.0 and f[..., 1].min() == 1.0
+
+
+def test_dither_rgb_softness_blends_edges():
+    pal = np.array([[0, 0, 0], [1, 1, 1], [0.5, 0.5, 0.5]], dtype=float)
+    img = np.repeat(np.linspace(0, 1, 256)[None, :, None], 48, 0).repeat(3, 2)
+    hard = core.apply(img, pal, core.Options(
+        mode="dither-rgb", dither_kind="halftone", dither_res=10, dither_softness=0.0))
+    soft = core.apply(img, pal, core.Options(
+        mode="dither-rgb", dither_kind="halftone", dither_res=10, dither_softness=0.4))
+    # softness 0 stays palette-only; softness > 0 introduces blended edge colours.
+    assert set(map(tuple, np.unique(hard.reshape(-1, 3), axis=0))) <= set(map(tuple, pal))
+    assert len(np.unique(soft.reshape(-1, 3), axis=0)) > len(pal)
+    assert soft.min() >= 0.0 and soft.max() <= 1.0
+
+
+def test_dither_rgb_single_colour_palette():
+    img = _img()
+    out = core.apply(img, np.array([[0.4, 0.4, 0.4]]),
+                     core.Options(mode="dither-rgb"))
+    assert np.allclose(out.reshape(-1, 3), [0.4, 0.4, 0.4])
+
+
+def test_mean_palette_gap():
+    assert core._mean_palette_gap(np.array([[0.5, 0.5, 0.5]])) == 0.0
+    pal = np.array([[0, 0, 0], [1, 0, 0]], dtype=float)
+    assert core._mean_palette_gap(pal) == pytest.approx(1.0)
 
 
 def test_blend_introduces_new_colours():

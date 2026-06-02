@@ -36,9 +36,16 @@ def _parse_triplet(ctx, param, value):
               help="nearest: snap to closest colour. second: 2nd closest. "
                    "blend: smooth lerp between the two nearest. "
                    "dither: ordered dither between the two nearest. "
+                   "dither-rgb: ordered dither each RGB channel independently, "
+                   "then snap to the palette. "
                    "factor: visualise the blend factor as greyscale.")
 @click.option("--metric", type=click.Choice(METRICS), default="rgb",
               show_default=True, help="Colour-distance metric for matching.")
+@click.option("--smooth", type=float, default=0.0, show_default=True,
+              metavar="SIGMA",
+              help="Gaussian-blur the source by this sigma (in pixels) before "
+                   "palettizing. Suppresses sharp pixel-sized artifacts from "
+                   "source noise; try 0.5-2.")
 @click.option("--max-colors", type=int, default=None,
               help="When importing a palette from an image, keep only the N "
                    "most frequent colours.")
@@ -60,8 +67,16 @@ def _parse_triplet(ctx, param, value):
               default=None, help="Image to tile as the dither pattern "
                                  "(for --dither texture).")
 @click.option("--dither-scale", type=float, default=1.0, show_default=True,
-              help="Resize the dither texture by this factor before tiling "
-                   "(e.g. 10 for 10x). Applies to --dither texture.")
+              help="Zoom the tiled dither texture by this factor (e.g. 10 for "
+                   "10x, 0.5 to shrink). At 1.0 the texture maps 1:1 to image "
+                   "pixels. Applies to --dither texture.")
+@click.option("--dither-softness", type=float, default=0.0, show_default=True,
+              help="Soften the colour boundary in dither / dither-rgb modes. "
+                   "0 = hard 1-bit edges; ~0.2-0.4 gives anti-aliased, smoothly "
+                   "blended edges (e.g. cleaner halftone circles).")
+@click.option("--dither-strength", type=float, default=1.0, show_default=True,
+              help="Per-channel dither amplitude for --mode dither-rgb, scaled "
+                   "by the palette spacing. ~1 is balanced; higher = grainier.")
 @click.option("--prefer-smallest", is_flag=True,
               help="In dither mode, bias toward the darker of the two colours.")
 @click.option("--hsv-weights", callback=_parse_triplet, default=None,
@@ -70,9 +85,11 @@ def _parse_triplet(ctx, param, value):
               metavar="H,S,V",
               help="Pre-shift hue (add) and scale sat/val (multiply) before "
                    "matching. Identity is 0,1,1.")
-def main(input_image, output_image, palette_spec, mode, metric, max_colors,
-         palette_range, dither_kind, dither_res, bayer_size, halftone_angle,
-         dither_texture, dither_scale, prefer_smallest, hsv_weights, hsv_adjust):
+def main(input_image, output_image, palette_spec, mode, metric, smooth,
+         max_colors, palette_range, dither_kind, dither_res, bayer_size,
+         halftone_angle,
+         dither_texture, dither_scale, dither_softness, dither_strength,
+         prefer_smallest, hsv_weights, hsv_adjust):
     """Apply a colour PALETTE to an image.
 
     \b
@@ -100,6 +117,7 @@ def main(input_image, output_image, palette_spec, mode, metric, max_colors,
     opts = core.Options(
         mode=mode,
         metric=metric,
+        pre_blur=smooth,
         hsv_weights=hsv_weights or (1.0, 1.0, 1.0),
         hsv_adjust=hsv_adjust or (0.0, 1.0, 1.0),
         dither_kind=dither_kind,
@@ -107,6 +125,8 @@ def main(input_image, output_image, palette_spec, mode, metric, max_colors,
         bayer_size=bayer_size,
         halftone_angle=halftone_angle,
         dither_scale=dither_scale,
+        dither_softness=dither_softness,
+        dither_strength=dither_strength,
         dither_texture=tex,
         prefer_smallest=prefer_smallest,
     )
