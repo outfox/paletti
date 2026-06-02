@@ -1,0 +1,26 @@
+[project]
+name = "paletti"
+version = "0.1.0"
+description = "Apply colour palettes to images (a CLI port of the palette-shader-2 shaders)"
+readme = "README.md"
+authors = [
+    { name = "tiger tiger tiger", email = "tiger@tiger.blue" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.4.1",
+    "numpy>=2.4.6",
+    "pillow>=12.2.0",
+]
+
+[project.scripts]
+paletti = "paletti:main"
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
