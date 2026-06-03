@@ -283,13 +283,6 @@ def test_blend_introduces_new_colours():
     assert len(np.unique(out.reshape(-1, 3), axis=0)) > len(pal)
 
 
-def test_factor_is_greyscale():
-    img = _img()
-    pal = np.array([[0, 0, 0], [1, 1, 1]], dtype=float)
-    out = core.apply(img, pal, core.Options(mode="factor")).reshape(-1, 3)
-    assert np.allclose(out[:, 0], out[:, 1]) and np.allclose(out[:, 1], out[:, 2])
-
-
 def test_single_colour_palette():
     img = _img()
     pal = np.array([[0.2, 0.4, 0.6]])
@@ -362,3 +355,48 @@ def test_cli_explicit_output_name(tmp_path):
     assert result.exit_code == 0, result.output
     assert out.exists()
     assert not (tmp_path / "paletti-in.png").exists()
+
+
+def _run_cli(tmp_path, *extra):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = tmp_path / "in.png"
+    Image.fromarray((_img() * 255).astype(np.uint8), "RGB").save(inp)
+    out = tmp_path / "out.png"
+    argv = [str(inp), str(out), "-p", '["#000000","#ffffff"]', *extra]
+    return CliRunner().invoke(main, argv), out
+
+
+def test_cli_modes_derived_from_flags(tmp_path):
+    for extra in ([], ["--blend"], ["--dither", "bayer"],
+                  ["--dither", "bayer", "--rgb"]):
+        result, out = _run_cli(tmp_path, *extra)
+        assert result.exit_code == 0, (extra, result.output)
+        assert out.exists()
+    # The reported mode reflects the derived selection.
+    assert "(dither-rgb/" in _run_cli(tmp_path, "--dither", "bayer", "--rgb")[0].output
+    assert "(blend/" in _run_cli(tmp_path, "--blend")[0].output
+
+
+def test_cli_blend_and_dither_mutually_exclusive(tmp_path):
+    result, _ = _run_cli(tmp_path, "--blend", "--dither", "bayer")
+    assert result.exit_code != 0
+    assert "mutually exclusive" in result.stderr
+
+
+def test_cli_warns_on_unused_options(tmp_path):
+    # --bayer without --dither has no effect -> warning on stderr.
+    result, _ = _run_cli(tmp_path, "--bayer", "8")
+    assert result.exit_code == 0, result.output
+    assert "--bayer ignored" in result.stderr
+
+    # --angle is only used by the halftone kind.
+    result, _ = _run_cli(tmp_path, "--dither", "bayer", "--angle", "30")
+    assert result.exit_code == 0, result.output
+    assert "--angle ignored" in result.stderr
+
+    # --hsv-weights is only used by the hsv metric.
+    result, _ = _run_cli(tmp_path, "--hsv-weights", "2,1,1")
+    assert result.exit_code == 0, result.output
+    assert "--hsv-weights ignored" in result.stderr

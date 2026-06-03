@@ -17,7 +17,7 @@ from . import color, dither
 # Render modes (see the shader's ``renderMode`` switch). ``dither-rgb`` is an
 # addition: ordered dither applied to each RGB channel independently before
 # snapping to the palette, rather than dithering along the two-nearest line.
-MODES = ("nearest", "second", "factor", "blend", "dither", "dither-rgb")
+MODES = ("nearest", "blend", "dither", "dither-rgb")
 
 # Distance metrics for matching a pixel to a palette colour.
 METRICS = ("rgb", "hsv")
@@ -237,11 +237,6 @@ def apply(image: np.ndarray, palette: np.ndarray, opts: Options) -> np.ndarray:
 
     if opts.mode == "nearest":
         out = point_a
-    elif opts.mode == "second":
-        out = point_b
-    elif opts.mode == "factor":
-        t = _abc_lerp(point_a, point_b, pixels)
-        out = np.repeat(t[:, None], 3, axis=1)
     elif opts.mode == "blend":
         t = _abc_lerp(point_a, point_b, pixels)[:, None]
         out = point_a + t * (point_b - point_a)
