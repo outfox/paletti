@@ -100,14 +100,18 @@ def test_texture_field_1to1_tiling_at_scale_one():
     assert np.array_equal(f, expected)
 
 
-def test_texture_field_scale_zooms_about_origin():
-    # scale 2.0 doubles the feature size (bilinear zoom about the origin). The
-    # even output pixels land exactly on texels, so they reproduce the texture
-    # tiled; the odd ones are the interpolated in-betweens.
-    src = np.array([[0.0, 1.0], [1.0, 0.0]])
-    f = dither.texture_field(8, 8, src, scale=2.0)
-    assert f.shape == (8, 8)
-    assert np.allclose(f[::2, ::2], np.tile(src, (2, 2)))
+def test_texture_field_zoom_is_isotropic_on_nonsquare_image():
+    # The zoom uses the same factor on both axes, so a square texture keeps its
+    # aspect on a NON-square image -- a round feature never gets stretched to the
+    # frame. Tile a 2x2 texture (bright texel at the origin) into a wide 4x12
+    # image at scale 2: even output pixels land exactly on texels, and the bright
+    # texel recurs with the SAME period (4 = 2 texels * scale 2) horizontally and
+    # vertically, proving isotropy.
+    src = np.array([[1.0, 0.0], [0.0, 0.0]])
+    f = dither.texture_field(4, 12, src, scale=2.0)
+    assert f.shape == (4, 12)
+    assert list(np.where(np.isclose(f[:, 0], 1.0))[0]) == [0]          # period 4 down (image only 4 tall)
+    assert list(np.where(np.isclose(f[0, :], 1.0))[0]) == [0, 4, 8]    # period 4 across -> same as vertical
     assert f[0, 0] == src[0, 0]  # origin is pinned
 
 

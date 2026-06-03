@@ -97,10 +97,12 @@ def texture_field(height: int, width: int, texture: np.ndarray, *,
                   scale: float = 1.0) -> np.ndarray:
     """Tile a texture across ``(height, width)``, then zoom it by ``scale``.
 
-    The texture is laid over the image at a 1:1 pixel ratio (one texel per
-    output pixel), repeating to fill the frame; ``scale`` then zooms that tiled
-    field about the origin -- ``2`` makes the pattern twice as large, ``0.5``
-    half. So ``scale == 1.0`` is an exact 1:1 mapping with no interpolation.
+    The texture is laid over the image at a 1:1 texel-to-pixel ratio, repeating
+    to fill the frame; ``scale`` then zooms that tiled field about the origin --
+    ``2`` makes the pattern twice as large, ``0.5`` half. The zoom is isotropic
+    (the same factor on both axes), so the pattern keeps its own aspect ratio
+    regardless of the image's -- a round dot stays round on any frame shape.
+    ``scale == 1.0`` is an exact 1:1 mapping with no interpolation.
 
     Returns ``(H, W)`` for a 2-D texture or ``(H, W, C)`` preserving channels.
     Values are normalised to ``[0, 1]``.
@@ -131,7 +133,7 @@ def dither_field(
     ``kind`` is one of ``"nearest"``, ``"sine"``, ``"bayer"``, ``"halftone"`` or
     ``"texture"``. For ``"halftone"`` ``res`` is the dot spacing and
     ``angle_deg`` rotates the grid. For ``"texture"`` a single-channel
-    ``texture`` array (any range, taken as its first channel) is resized by
+    ``texture`` array (any range, taken as its first channel) is zoomed by
     ``scale`` (e.g. ``10`` for 10x) and then tiled across the image.
     """
     if kind == "nearest":

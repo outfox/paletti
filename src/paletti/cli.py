@@ -129,7 +129,8 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
 @click.option("--scale", type=float, default=1.0, show_default=True,
               help="Zoom the tiled dither texture by this factor (e.g. 10 for "
                    "10x, 0.5 to shrink). At 1.0 the texture maps 1:1 to image "
-                   "pixels. Applies to --dither texture.")
+                   "pixels. The zoom is isotropic, so the pattern keeps its "
+                   "aspect ratio on any frame shape. Applies to --dither texture.")
 @click.option("--softness", type=float, default=0.0, show_default=True,
               help="Soften the colour boundary when dithering. 0 = hard 1-bit "
                    "edges; ~0.2-0.4 gives anti-aliased, smoothly blended edges "
