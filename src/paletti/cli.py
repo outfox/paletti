@@ -99,8 +99,11 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
 @click.option("--rgb", is_flag=True,
               help="With --dither, dither each RGB channel independently before "
                    "snapping (dissolves banding).")
-@click.option("--metric", type=click.Choice(METRICS), default="rgb",
-              show_default=True, help="Colour-distance metric for matching.")
+@click.option("--metric", type=click.Choice(METRICS), default="oklab",
+              show_default=True,
+              help="Colour-distance metric for matching: oklab (perceptual), "
+                   "rgb (Euclidean), hsl/hsv (cylindrical), hue or luma "
+                   "(single-axis).")
 @click.option("--smooth", type=float, default=0.0, show_default=True,
               metavar="SIGMA",
               help="Gaussian-blur the source by this sigma (in pixels) before "

@@ -88,7 +88,11 @@ paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
   as sharp pixel-sized speckle. A small pre-blur (try `0.5`-`2`) makes the
   selection spatially coherent and cleans that up while leaving the dither
   pattern intact.
-- `--metric {rgb,hsv}` — colour-distance metric used for matching.
+- `--metric {oklab,rgb,hsl,hsv,hue,luma}` — colour-distance metric used for
+  matching (default `oklab`, which measures perceptual difference). `rgb` is
+  plain Euclidean; `hsl`/`hsv` compare in cylindrical space (hue on its circle);
+  `hue` and `luma` match on that single axis alone. `--hsv-weights` tunes the
+  per-axis weighting of `hsv`.
 - `--hsv-adjust H,S,V` — pre-shift hue (add) and scale saturation/value
   (multiply) before matching; identity is `0,1,1`.
 - `--dither {nearest,sine,bayer,halftone,texture}`, `--res`, `--bayer`,

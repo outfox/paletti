@@ -297,6 +297,50 @@ def test_hsv_metric_runs():
     assert out.shape == img.shape
 
 
+def test_rgb2hsl_known_values():
+    # Primaries share hue with HSV; at full saturation HSL lightness is 0.5.
+    hsl = color.rgb2hsl(np.array([[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]]))
+    assert np.allclose(hsl[:, 0], [0.0, 1 / 3, 2 / 3])
+    assert np.allclose(hsl[:, 1], 1.0)
+    assert np.allclose(hsl[:, 2], 0.5)
+    # Black, mid-grey, white: zero saturation, lightness tracks the grey level.
+    grey = color.rgb2hsl(np.array([[0, 0, 0], [0.5, 0.5, 0.5], [1, 1, 1.0]]))
+    assert np.allclose(grey[:, 1], 0.0)
+    assert np.allclose(grey[:, 2], [0.0, 0.5, 1.0])
+
+
+def test_rgb2oklab_reference_values():
+    # Reference L,a,b from Ottosson's published sRGB examples.
+    lab = color.rgb2oklab(np.array([[1.0, 1.0, 1.0], [1.0, 0.0, 0.0]]))
+    assert np.allclose(lab[0], [1.0, 0.0, 0.0], atol=1e-3)  # white
+    assert np.allclose(lab[1], [0.628, 0.225, 0.126], atol=1e-3)  # red
+
+
+def test_rgb2luma_weights():
+    luma = color.rgb2luma(np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1.0]]))
+    assert np.allclose(luma, [0.2126, 0.7152, 0.0722])
+
+
+@pytest.mark.parametrize("metric", core.METRICS)
+def test_every_metric_runs_and_snaps(metric):
+    img = _img()
+    pal = np.array([[0, 0, 0], [1, 1, 1], [1, 0, 0], [0, 0, 1]], dtype=float)
+    out = core.apply(img, pal, core.Options(mode="nearest", metric=metric))
+    assert out.shape == img.shape
+    # nearest mode must only ever emit exact palette colours.
+    flat = out.reshape(-1, 3)
+    assert np.all(np.any(np.all(flat[:, None, :] == pal[None, :, :], axis=2), axis=1))
+
+
+def test_default_metric_is_oklab():
+    assert core.Options().metric == "oklab"
+
+
+def test_invalid_metric_raises():
+    with pytest.raises(ValueError):
+        core.apply(_img(), np.array([[0, 0, 0.0]]), core.Options(metric="nope"))
+
+
 def test_empty_palette_raises():
     with pytest.raises(ValueError):
         core.apply(_img(), np.empty((0, 3)), core.Options())

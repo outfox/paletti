@@ -19,8 +19,11 @@ from . import color, dither
 # snapping to the palette, rather than dithering along the two-nearest line.
 MODES = ("nearest", "blend", "dither", "dither-rgb")
 
-# Distance metrics for matching a pixel to a palette colour.
-METRICS = ("rgb", "hsv")
+# Distance metrics for matching a pixel to a palette colour. "oklab" measures
+# perceptual difference and is the default; "rgb" is plain Euclidean; "hsl"/
+# "hsv" weight the cylindrical channels (hue handled on its circle); "hue" and
+# "luma" match on that single axis alone.
+METRICS = ("oklab", "rgb", "hsl", "hsv", "hue", "luma")
 
 DITHER_KINDS = ("nearest", "sine", "bayer", "halftone", "texture")
 
@@ -28,7 +31,7 @@ DITHER_KINDS = ("nearest", "sine", "bayer", "halftone", "texture")
 @dataclass
 class Options:
     mode: str = "nearest"
-    metric: str = "rgb"
+    metric: str = "oklab"
     pre_blur: float = 0.0
     hsv_weights: tuple[float, float, float] = (1.0, 1.0, 1.0)
     hsv_adjust: tuple[float, float, float] = (0.0, 1.0, 1.0)
@@ -57,6 +60,26 @@ def _hue_dist(h0: np.ndarray, h1: np.ndarray) -> np.ndarray:
     return np.minimum(d, 1.0 - d)
 
 
+def _to_metric_space(rgb: np.ndarray, metric: str) -> np.ndarray:
+    """Project an ``(..., 3)`` RGB array into the feature space of ``metric``.
+
+    Cylindrical metrics keep their channel layout (hue stays in channel 0 so the
+    distance step can treat it on its circle); ``hue`` and ``luma`` collapse to a
+    single trailing axis.
+    """
+    if metric == "oklab":
+        return color.rgb2oklab(rgb)
+    if metric == "hsv":
+        return color.rgb2hsv(rgb)
+    if metric == "hsl":
+        return color.rgb2hsl(rgb)
+    if metric == "hue":
+        return color.rgb2hsv(rgb)[..., 0]
+    if metric == "luma":
+        return color.rgb2luma(rgb)
+    return np.asarray(rgb, dtype=np.float64)  # rgb
+
+
 def _two_nearest(pixels: np.ndarray, palette: np.ndarray,
                  opts: Options) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(idxA, idxB)`` palette indices of the two closest colours.
@@ -69,23 +92,28 @@ def _two_nearest(pixels: np.ndarray, palette: np.ndarray,
     idx_a = np.empty(p, dtype=np.intp)
     idx_b = np.empty(p, dtype=np.intp)
 
-    if opts.metric == "hsv":
-        pal = color.rgb2hsv(palette)
-        wt = np.asarray(opts.hsv_weights, dtype=np.float64)
-    else:
-        pal = palette
+    metric = opts.metric
+    pal = _to_metric_space(palette, metric)
+    wt = np.asarray(opts.hsv_weights, dtype=np.float64)
 
     chunk = max(1, (1 << 22) // max(n, 1))  # ~4M distance entries per chunk
     for start in range(0, p, chunk):
         block = pixels[start : start + chunk]
-        if opts.metric == "hsv":
-            hsv = color.rgb2hsv(block)
-            dh = _hue_dist(hsv[:, None, 0], pal[None, :, 0]) * wt[0]
-            ds = (hsv[:, None, 1] - pal[None, :, 1]) * wt[1]
-            dv = (hsv[:, None, 2] - pal[None, :, 2]) * wt[2]
-            dist = np.sqrt(dh * dh + ds * ds + dv * dv)
-        else:
-            diff = block[:, None, :] - pal[None, :, :]
+        feat = _to_metric_space(block, metric)
+        if metric in ("hsv", "hsl"):
+            # Hue lives on a circle; saturation/value (or lightness) are linear.
+            # The hsv metric additionally weights the three axes by --hsv-weights.
+            w = wt if metric == "hsv" else np.ones(3)
+            dh = _hue_dist(feat[:, None, 0], pal[None, :, 0]) * w[0]
+            ds = (feat[:, None, 1] - pal[None, :, 1]) * w[1]
+            dz = (feat[:, None, 2] - pal[None, :, 2]) * w[2]
+            dist = np.sqrt(dh * dh + ds * ds + dz * dz)
+        elif metric == "hue":
+            dist = _hue_dist(feat[:, None], pal[None, :])
+        elif metric == "luma":
+            dist = np.abs(feat[:, None] - pal[None, :])
+        else:  # rgb, oklab: plain Euclidean in the feature space
+            diff = feat[:, None, :] - pal[None, :, :]
             dist = np.sqrt(np.einsum("pnc,pnc->pn", diff, diff))
 
         if n == 1:
