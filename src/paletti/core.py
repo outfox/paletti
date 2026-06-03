@@ -1,14 +1,14 @@
 """The palette-application logic, ported from ``PaletteShader2.shader``.
 
-For every pixel the shader finds the two nearest palette colours (``pointA`` the
-closest, ``pointB`` the second closest) and then, depending on the render mode,
+For every pixel the shader finds the two nearest palette colours (``point A`` the
+closest, ``point B`` the second closest) and then, depending on the render mode,
 either snaps to one of them, smoothly blends between them, or ordered-dithers
-between them. We reproduce that here as vectorised NumPy over the whole image.
+between them. We reproduce that here as vectorized NumPy over the whole image.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -136,9 +136,9 @@ def _abc_lerp(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
     """
     ab = b - a
     ac = c - a
-    denom = np.einsum("pc,pc->p", ab, ab)
-    denom = np.where(denom < 1e-12, 1e-12, denom)
-    t = np.einsum("pc,pc->p", ac, ab) / denom
+    denominator = np.einsum("pc,pc->p", ab, ab)
+    denominator = np.where(denominator < 1e-12, 1e-12, denominator)
+    t = np.einsum("pc,pc->p", ac, ab) / denominator
     return np.clip(t, 0.0, 1.0)
 
 
@@ -173,7 +173,7 @@ def _gaussian_blur(image: np.ndarray, sigma: float) -> np.ndarray:
 
 
 def _make_field(opts: Options, h: int, w: int) -> np.ndarray:
-    """Build the flat ``(H*W,)`` dither field selected by ``opts``."""
+    """Build the flat ``(H*W, )`` dither field selected by ``opts``."""
     return dither.dither_field(
         opts.dither_kind, h, w,
         res=opts.dither_res, matrix_size=opts.bayer_size,
@@ -182,19 +182,13 @@ def _make_field(opts: Options, h: int, w: int) -> np.ndarray:
     ).reshape(-1)
 
 
-def _make_field_rgb(opts: Options, h: int, w: int,
-                    decorrelate: bool = True) -> np.ndarray:
+def _make_field_rgb(opts: Options, h: int, w: int) -> np.ndarray:
     """Return an ``(H*W, 3)`` per-channel dither field for ``dither-rgb``.
 
     If the dither texture is genuinely RGB (its channels actually differ), each
-    of its R/G/B channels drives the matching image channel. Otherwise a single
-    field is reused for every channel.
-
-    With ``decorrelate`` (the default), the reused grey field is rotated by 1/3
-    per channel so the three channels' patterns are offset -- that decorrelation
-    is what dissolves banding in the hard 1-bit path. Pass ``decorrelate=False``
-    when blending softly: there the three channels must share the *same* field,
-    otherwise their offset ramps split a smooth A<->B edge into rainbow rings.
+    of its R/G/B channels drives the matching image channel. Otherwise, a single
+    field is reused, rotated by 1/3 per channel to decorrelate the noise (that
+    decorrelation is what dissolves banding in the hard 1-bit path).
     """
     if opts.dither_kind == "texture" and opts.dither_texture is not None:
         tex = np.asarray(opts.dither_texture, dtype=np.float64)
@@ -208,8 +202,6 @@ def _make_field_rgb(opts: Options, h: int, w: int,
                 return field.reshape(-1, 3)
 
     field = _make_field(opts, h, w)
-    if not decorrelate:
-        return np.repeat(field[:, None], 3, axis=1)
     phases = np.array([0.0, 1.0 / 3.0, 2.0 / 3.0])
     return (field[:, None] + phases[None, :]) % 1.0
 
@@ -230,42 +222,33 @@ def apply(image: np.ndarray, palette: np.ndarray, opts: Options) -> np.ndarray:
     pixels = rgb.reshape(-1, 3)
 
     if opts.mode == "dither-rgb":
-        # Per-channel ordered dither between the two nearest palette colours.
-        # Each channel is thresholded against its own dither field exactly as the
-        # plain dither does with its scalar field (``t + field >= 1``), so a
-        # distance-field texture produces a *crisp* circular boundary -- the dot
-        # radius set by ``t`` (the pixel's position between A and B) -- rather
-        # than the fuzzy gradient the old additive offset gave. A colour texture
-        # drives each channel from its own channel; a grey field is rotated 1/3
-        # per channel so the three channels' patterns stay decorrelated (which is
-        # what dissolves banding for bayer/noise fields).
+        # Per-channel ordered dither between the two nearest palette colours, then
+        # snap the (possibly channel-mixed) result back onto the palette. Each
+        # channel is thresholded against its own dither field by per-channel
+        # intensity (how far the channel sits from A toward B), so a distance-field
+        # texture yields a crisp dot whose radius tracks intensity; a colour
+        # texture drives each channel from its own channel, a grey field is rotated
+        # 1/3 per channel to decorrelate (which dissolves banding for bayer/noise).
         idx_a, idx_b = _two_nearest(pixels, palette, opts)
         a, b = palette[idx_a], palette[idx_b]
-        # Per-channel intensity: how far each channel sits from A toward B. Where
-        # A and B share a channel the fraction is moot (kept at 0).
-        denom = b - a
-        safe = np.abs(denom) > 1e-9
-        t = np.clip(np.where(safe, (pixels - a) / np.where(safe, denom, 1.0), 0.0),
+        denominator = b - a
+        safe = np.abs(denominator) > 1e-9
+        t = np.clip(np.where(safe, (pixels - a) / np.where(safe, denominator, 1.0), 0.0),
                     0.0, 1.0)
+        field_rgb = _make_field_rgb(opts, h, w)
+        target = a + (t + field_rgb - 1.0 >= 0.0) * (b - a)
+        snap, _ = _two_nearest(target, palette, opts)
+        crisp = palette[snap].reshape(h, w, 3)
+
+        # ``softness`` anti-aliases the dot edges. The per-channel snap is 1-bit
+        # and on-palette, and A/B are nearest neighbours with no palette colour
+        # between them, so the threshold itself can never hold the in-between
+        # tones an anti-aliased edge needs -- softening it would only shift the
+        # boundary (shrink the dots) -- instead we soften the *rendered* result,
+        # which lets neighbouring palette colours blend across each boundary; the
+        # blur radius grows with ``soft`` and 0 leaves the crisp dither untouched.
         soft = opts.dither_softness
-        if soft <= 0.0:
-            # Hard, crisp edge. Dither each channel against its own (decorrelated)
-            # field; the per-channel pick can mix A's and B's channels, so snap
-            # the result back onto the palette to stay 1-bit and on-palette.
-            field_rgb = _make_field_rgb(opts, h, w)
-            target = a + (t + field_rgb - 1.0 >= 0.0) * (b - a)
-            snap, _ = _two_nearest(target, palette, opts)
-            out = palette[snap]
-        else:
-            # Soft edge: smoothstep a band of width ``soft`` across each channel's
-            # boundary (``soft`` ~1 blends A<->B roughly linearly across the dot).
-            # The field is NOT rotated here, so a grey texture blends cleanly
-            # between the two colours instead of fanning into rainbow rings.
-            field_rgb = _make_field_rgb(opts, h, w, decorrelate=False)
-            x = np.clip((t + field_rgb - 1.0) / soft + 0.5, 0.0, 1.0)
-            blend = x * x * (3.0 - 2.0 * x)
-            out = a + blend * (b - a)
-        return out.reshape(h, w, 3)
+        return crisp if soft <= 0.0 else _gaussian_blur(crisp, soft)
 
     idx_a, idx_b = _two_nearest(pixels, palette, opts)
     point_a = palette[idx_a]

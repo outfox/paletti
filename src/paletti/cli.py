@@ -129,10 +129,12 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
                    "pixels. The zoom is isotropic, so the pattern keeps its "
                    "aspect ratio on any frame shape. Applies to --dither texture.")
 @click.option("--softness", type=float, default=0.0, show_default=True,
-              help="Width of the smoothstep blend across a dithered edge (e.g. "
-                   "the boundary of a halftone/texture dot). 0 = hard 1-bit "
-                   "edge; ~0.2-0.4 anti-aliases it; 1.0 blends the two colours "
-                   "roughly linearly across the whole dot. Works in --rgb too.")
+              help="Anti-alias dithered edges (e.g. halftone/texture dots). 0 = "
+                   "hard 1-bit edges. For --dither it is the smoothstep blend "
+                   "width across the A/B boundary (~1 = across the whole dot). "
+                   "For --rgb the crisp per-channel result is on-palette, so its "
+                   "edges are instead softened in the render by a blur that grows "
+                   "with the value (try ~0.5-1.5). Higher = softer.")
 @click.option("--prefer-smallest", is_flag=True,
               help="When dithering, bias toward the darker of the two colours.")
 @click.option("--hsv-weights", callback=_parse_triplet, default=None,

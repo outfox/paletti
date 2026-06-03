@@ -10,8 +10,12 @@ wheels/
 .venv
 
 palette-shader-2
+
+palettes
+input
 *.png
 *.jpg
 *.jpeg
 *.webp
 *.pdn
+

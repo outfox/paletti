@@ -255,17 +255,28 @@ def test_texture_field_preserves_channels():
     assert f[..., 0].max() == 0.0 and f[..., 1].min() == 1.0
 
 
-def test_dither_rgb_softness_blends_edges():
+def test_dither_rgb_softness_antialiases_edges():
     pal = np.array([[0, 0, 0], [1, 1, 1], [0.5, 0.5, 0.5]], dtype=float)
     img = np.repeat(np.linspace(0, 1, 256)[None, :, None], 48, 0).repeat(3, 2)
     hard = core.apply(img, pal, core.Options(
         mode="dither-rgb", dither_kind="halftone", dither_res=10, dither_softness=0.0))
     soft = core.apply(img, pal, core.Options(
-        mode="dither-rgb", dither_kind="halftone", dither_res=10, dither_softness=0.4))
-    # softness 0 stays palette-only; softness > 0 introduces blended edge colours.
+        mode="dither-rgb", dither_kind="halftone", dither_res=10, dither_softness=1.0))
+
+    # softness 0 is the crisp per-channel dither: 1-bit and strictly on-palette.
     assert set(map(tuple, np.unique(hard.reshape(-1, 3), axis=0))) <= set(map(tuple, pal))
+
+    # softness > 0 anti-aliases the dot edges. That needs the in-between tones the
+    # palette does not contain, so it deliberately introduces off-palette colours
+    # (blends of neighbouring palette entries) -- only at edges; values stay in
+    # range and the locally-averaged result tracks the gradient at least as well.
     assert len(np.unique(soft.reshape(-1, 3), axis=0)) > len(pal)
     assert soft.min() >= 0.0 and soft.max() <= 1.0
+
+    def blur_err(out):
+        return float(np.mean(np.abs(core._gaussian_blur(out, 2.0) - img)))
+
+    assert blur_err(soft) <= blur_err(hard) + 1e-9
 
 
 def test_dither_rgb_single_colour_palette():
