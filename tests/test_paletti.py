@@ -495,7 +495,7 @@ def test_cli_warns_on_unused_options(tmp_path):
 
 
 def test_cli_denoise_runs_without_warning(tmp_path):
-    # --denoise is a universal pre-pass (like --smooth): it always applies, so it
+    # --denoise is a universal pre-pass (like --blur): it always applies, so it
     # runs cleanly and is never reported as ignored.
     result, out = _run_cli(tmp_path, "--denoise", "0.1")
     assert result.exit_code == 0, result.output

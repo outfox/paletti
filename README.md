@@ -47,7 +47,7 @@ By default each pixel snaps to its closest palette colour. Two flags change that
 |-----------------------|----------------------------------------------------------------|
 | (default)             | snap each pixel to the closest palette colour                   |
 | `--blend`             | smooth lerp between the two nearest colours                     |
-| `--dither KIND`       | ordered dither between the two nearest colours (1-bit edges, or soften with `--softness`) |
+| `--dither KIND`       | ordered dither between the two nearest colours (1-bit edges, or soften with `--antialias`) |
 | `--dither KIND --rgb` | ordered dither each RGB channel independently, then snap to the palette (dissolves banding; great with `--dither bayer` or a blue-noise `--dither texture`). With an RGB `--texture` each colour channel drives the matching image channel; a greyscale texture is reused with a 1/3 phase shift per channel. |
 
 `--blend` and `--dither` are mutually exclusive. `KIND` is one of
@@ -82,18 +82,18 @@ paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
 
 ### Other options
 
-- `--smooth SIGMA` — Gaussian-blur the source (sigma in pixels) before
+- `--blur SIGMA` — Gaussian-blur the source (sigma in pixels) before
   palettizing. Matching is per-pixel, so source noise / JPEG blocking / faint
   gradients near a palette-colour boundary flip the chosen colours and show up
   as sharp pixel-sized speckle. A small pre-blur (try `0.5`-`2`) makes the
   selection spatially coherent and cleans that up while leaving the dither
   pattern intact.
 - `--denoise STRENGTH` — edge-preserving bilateral denoise of the source before
-  palettizing. Like `--smooth` it suppresses source noise / JPEG blocking, but
+  palettizing. Like `--blur` it suppresses source noise / JPEG blocking, but
   it keeps the colour edges that drive palette matching crisp (instead of
   blurring them), giving cleaner flat regions. `STRENGTH` is the colour sigma in
   `[0,1]` units (try `0.05`-`0.3`). Requires `scikit-image`; slower than
-  `--smooth`. Can be combined with `--smooth`.
+  `--blur`. Can be combined with `--blur`.
 - `--metric {oklab,rgb,hsl,hsv,hue,luma}` — colour-distance metric used for
   matching (default `oklab`, which measures perceptual difference). `rgb` is
   plain Euclidean; `hsl`/`hsv` compare in cylindrical space (hue on its circle);
@@ -111,7 +111,7 @@ paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
   laid over the image at a 1:1 pixel ratio and repeated to fill it, so
   `--scale 1.0` is an exact 1:1 mapping; other values zoom the tiled field about
   the origin via seamless bilinear sampling.
-- `--softness` — anti-alias dithered edges (e.g. halftone/texture dots). `0`
+- `--antialias` — anti-alias dithered edges (e.g. halftone/texture dots). `0`
   (default) gives hard 1-bit edges. For plain `--dither` it is the smoothstep
   blend width across the A/B boundary (`~1` blends the two colours across the
   whole dot). For `--rgb` the crisp per-channel result is strictly on-palette
