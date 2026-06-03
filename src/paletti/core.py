@@ -33,6 +33,7 @@ class Options:
     mode: str = "nearest"
     metric: str = "oklab"
     pre_blur: float = 0.0
+    denoise: float = 0.0
     hsv_weights: tuple[float, float, float] = (1.0, 1.0, 1.0)
     hsv_adjust: tuple[float, float, float] = (0.0, 1.0, 1.0)
     dither_kind: str = "bayer"
@@ -172,6 +173,31 @@ def _gaussian_blur(image: np.ndarray, sigma: float) -> np.ndarray:
     return conv(conv(image, 0), 1)
 
 
+def _denoise(image: np.ndarray, strength: float) -> np.ndarray:
+    """Edge-preserving bilateral denoise of an ``(H, W, C)`` float image in ``[0, 1]``.
+
+    Unlike the Gaussian ``_gaussian_blur`` pre-pass, this smooths flat regions
+    while keeping the colour edges that drive palette matching crisp. ``strength``
+    is the bilateral colour sigma (in ``[0, 1]`` units); ``<= 0`` is a no-op.
+
+    scikit-image is imported lazily so ``core`` stays importable without it; only
+    an actual ``--denoise`` run pulls it in, with a clear message if it is missing.
+    """
+    if strength <= 0.0:
+        return image
+    try:
+        from skimage.restoration import denoise_bilateral
+    except ImportError as exc:  # pragma: no cover - depends on optional install
+        raise ImportError(
+            "--denoise requires scikit-image; install it with "
+            "'uv add scikit-image' (or 'pip install scikit-image')."
+        ) from exc
+    out = denoise_bilateral(
+        image, sigma_color=float(strength), sigma_spatial=1.5, channel_axis=-1,
+    )
+    return np.clip(out, 0.0, 1.0).astype(np.float64, copy=False)
+
+
 def _make_field(opts: Options, h: int, w: int) -> np.ndarray:
     """Build the flat ``(H*W, )`` dither field selected by ``opts``."""
     return dither.dither_field(
@@ -217,7 +243,8 @@ def apply(image: np.ndarray, palette: np.ndarray, opts: Options) -> np.ndarray:
         raise ValueError("palette is empty")
 
     h, w = image.shape[:2]
-    base = _gaussian_blur(image, opts.pre_blur)
+    base = _denoise(image, opts.denoise)
+    base = _gaussian_blur(base, opts.pre_blur)
     rgb = color.hsv_adjust(base, opts.hsv_adjust)
     pixels = rgb.reshape(-1, 3)
 

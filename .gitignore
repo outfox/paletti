@@ -13,6 +13,7 @@ palette-shader-2
 
 palettes
 input
+output
 *.png
 *.jpg
 *.jpeg

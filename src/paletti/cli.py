@@ -106,6 +106,12 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
               help="Gaussian-blur the source by this sigma (in pixels) before "
                    "palettizing. Suppresses sharp pixel-sized artifacts from "
                    "source noise; try 0.5-2.")
+@click.option("--denoise", type=float, default=0.0, show_default=True,
+              metavar="STRENGTH",
+              help="Edge-preserving bilateral denoise of the source before "
+                   "palettizing. Smooths flat regions while keeping colour edges "
+                   "(unlike --smooth); STRENGTH is the colour sigma in [0,1] units "
+                   "(try 0.05-0.3). Requires scikit-image; slower than --smooth.")
 @click.option("--max-colors", type=int, default=None,
               help="When importing a palette from an image, keep only the N "
                    "most frequent colours.")
@@ -145,8 +151,8 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
                    "matching. Identity is 0,1,1.")
 @click.pass_context
 def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
-         metric, smooth, max_colors, palette_range, res, bayer, angle, texture,
-         scale, softness, prefer_smallest, hsv_weights, hsv_adjust):
+         metric, smooth, denoise, max_colors, palette_range, res, bayer, angle,
+         texture, scale, softness, prefer_smallest, hsv_weights, hsv_adjust):
     """Apply a colour PALETTE to an image.
 
     By default each pixel snaps to its nearest palette colour. Use --blend for a
@@ -205,6 +211,7 @@ def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
         mode=mode,
         metric=metric,
         pre_blur=smooth,
+        denoise=denoise,
         dither_kind=dither_kind or "bayer",
         dither_res=res,
         bayer_size=bayer,

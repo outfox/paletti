@@ -192,6 +192,44 @@ def test_pre_blur_reduces_speckle():
     assert transitions(1.5) < transitions(0.0)
 
 
+def test_denoise_reduces_noise_preserves_mean():
+    rng = np.random.default_rng(3)
+    img = np.clip(0.5 + 0.05 * rng.standard_normal((64, 64, 3)), 0, 1)
+    out = core._denoise(img, 0.1)
+    assert out.std() < img.std()                      # noise suppressed
+    assert out.mean() == pytest.approx(img.mean(), abs=0.02)
+    assert core._denoise(img, 0.0) is img             # no-op fast path
+
+
+def test_denoise_preserves_edges_better_than_blur():
+    # A sharp vertical step edge: bilateral (colour sigma << edge height) keeps it
+    # crisp, whereas the Gaussian pre-blur softens it.
+    img = np.full((48, 48, 3), 0.2)
+    img[:, 24:, :] = 0.8
+    denoised = core._denoise(img, 0.1)
+    blurred = core._gaussian_blur(img, 1.5)
+
+    def max_h_gradient(a):
+        return float(np.abs(np.diff(a[..., 0], axis=1)).max())
+
+    assert max_h_gradient(denoised) > max_h_gradient(blurred)
+
+
+def test_denoise_reduces_speckle():
+    # Mirrors test_pre_blur_reduces_speckle: edge-preserving denoise of a noisy
+    # near-boundary flat field should also cut the per-pixel colour transitions.
+    rng = np.random.default_rng(4)
+    flat = np.clip(np.full((96, 96, 3), 0.5) + 0.03 * rng.standard_normal((96, 96, 3)), 0, 1)
+    pal = np.array([[0.3, 0.3, 0.3], [0.7, 0.7, 0.7], [0.5, 0.5, 0.55]])
+
+    def transitions(strength):
+        out = core.apply(flat, pal, core.Options(
+            mode="dither", dither_kind="halftone", dither_res=12, denoise=strength))
+        return int(np.sum(np.abs(np.diff(out[..., 0], axis=1)) > 1e-6))
+
+    assert transitions(0.2) < transitions(0.0)
+
+
 def test_dither_softness_introduces_gradient():
     img = _img()
     pal = np.array([[0, 0, 0], [1, 1, 1]], dtype=float)
@@ -454,3 +492,12 @@ def test_cli_warns_on_unused_options(tmp_path):
     result, _ = _run_cli(tmp_path, "--hsv-weights", "2,1,1")
     assert result.exit_code == 0, result.output
     assert "--hsv-weights ignored" in result.stderr
+
+
+def test_cli_denoise_runs_without_warning(tmp_path):
+    # --denoise is a universal pre-pass (like --smooth): it always applies, so it
+    # runs cleanly and is never reported as ignored.
+    result, out = _run_cli(tmp_path, "--denoise", "0.1")
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    assert "ignored" not in result.stderr

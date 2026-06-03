@@ -88,6 +88,12 @@ paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
   as sharp pixel-sized speckle. A small pre-blur (try `0.5`-`2`) makes the
   selection spatially coherent and cleans that up while leaving the dither
   pattern intact.
+- `--denoise STRENGTH` — edge-preserving bilateral denoise of the source before
+  palettizing. Like `--smooth` it suppresses source noise / JPEG blocking, but
+  it keeps the colour edges that drive palette matching crisp (instead of
+  blurring them), giving cleaner flat regions. `STRENGTH` is the colour sigma in
+  `[0,1]` units (try `0.05`-`0.3`). Requires `scikit-image`; slower than
+  `--smooth`. Can be combined with `--smooth`.
 - `--metric {oklab,rgb,hsl,hsv,hue,luma}` — colour-distance metric used for
   matching (default `oklab`, which measures perceptual difference). `rgb` is
   plain Euclidean; `hsl`/`hsv` compare in cylindrical space (hue on its circle);
