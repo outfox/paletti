@@ -51,7 +51,6 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
         for name, flag in (("res", "--res"), ("bayer", "--bayer"),
                            ("angle", "--angle"), ("texture", "--texture"),
                            ("scale", "--scale"), ("softness", "--softness"),
-                           ("strength", "--strength"),
                            ("prefer_smallest", "--prefer-smallest"),
                            ("rgb", "--rgb")):
             if given(name):
@@ -67,8 +66,6 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
             warn("--scale", "only --dither texture uses it")
         if given("prefer_smallest") and mode != "dither":
             warn("--prefer-smallest", "only plain dither uses it, not --rgb")
-        if given("strength") and mode != "dither-rgb":
-            warn("--strength", "only --rgb dither uses it")
 
     if given("hsv_weights") and metric != "hsv":
         warn("--hsv-weights", "only --metric hsv uses it")
@@ -132,12 +129,10 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
                    "pixels. The zoom is isotropic, so the pattern keeps its "
                    "aspect ratio on any frame shape. Applies to --dither texture.")
 @click.option("--softness", type=float, default=0.0, show_default=True,
-              help="Soften the colour boundary when dithering. 0 = hard 1-bit "
-                   "edges; ~0.2-0.4 gives anti-aliased, smoothly blended edges "
-                   "(e.g. cleaner halftone circles).")
-@click.option("--strength", type=float, default=1.0, show_default=True,
-              help="Per-channel dither amplitude for --rgb dithering, scaled by "
-                   "the palette spacing. ~1 is balanced; higher = grainier.")
+              help="Width of the smoothstep blend across a dithered edge (e.g. "
+                   "the boundary of a halftone/texture dot). 0 = hard 1-bit "
+                   "edge; ~0.2-0.4 anti-aliases it; 1.0 blends the two colours "
+                   "roughly linearly across the whole dot. Works in --rgb too.")
 @click.option("--prefer-smallest", is_flag=True,
               help="When dithering, bias toward the darker of the two colours.")
 @click.option("--hsv-weights", callback=_parse_triplet, default=None,
@@ -149,7 +144,7 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
 @click.pass_context
 def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
          metric, smooth, max_colors, palette_range, res, bayer, angle, texture,
-         scale, softness, strength, prefer_smallest, hsv_weights, hsv_adjust):
+         scale, softness, prefer_smallest, hsv_weights, hsv_adjust):
     """Apply a colour PALETTE to an image.
 
     By default each pixel snaps to its nearest palette colour. Use --blend for a
@@ -214,7 +209,6 @@ def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
         halftone_angle=angle,
         dither_scale=scale,
         dither_softness=softness,
-        dither_strength=strength,
         dither_texture=tex,
         prefer_smallest=prefer_smallest,
         **extra,

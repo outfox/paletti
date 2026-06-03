@@ -105,12 +105,10 @@ paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
   laid over the image at a 1:1 pixel ratio and repeated to fill it, so
   `--scale 1.0` is an exact 1:1 mapping; other values zoom the tiled field about
   the origin via seamless bilinear sampling.
-- `--softness` — by default dithering picks one palette colour per pixel (hard
-  1-bit edges). A value like `0.2`-`0.4` smoothstep-blends a gradient band across
-  the colour boundary, anti-aliasing the pattern (e.g. smooth halftone circles);
-  `0` keeps the original sharp look.
-- `--strength` — per-channel dither amplitude for `--rgb` dithering, auto-scaled
-  by the palette spacing (`~1` is balanced, higher is grainier).
+- `--softness` — width of the smoothstep blend across a dithered edge (e.g. the
+  boundary of a halftone/texture dot). `0` (default) gives hard 1-bit edges;
+  `0.2`-`0.4` anti-aliases them; `1.0` blends the two colours roughly linearly
+  across the whole dot. Works for plain `--dither` and `--rgb` alike.
 - `--prefer-smallest` — when dithering, bias toward the darker of the two
   colours.
 
