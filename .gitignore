@@ -1,3 +1,6 @@
+# local batch test
+test.nu
+
 # Python-generated files
 __pycache__/
 *.py[oc]
