@@ -12,7 +12,7 @@ import numpy as np
 
 
 def bayer_matrix(n: int) -> np.ndarray:
-    """Return an ``n x n`` Bayer ordered-dither matrix normalised to ``[0, 1)``.
+    """Return an ``n x n`` Bayer ordered-dither matrix normalized to ``[0, 1)``.
 
     ``n`` must be a power of two. Values are the classic recursive threshold map
     divided by ``n*n`` so they tile cleanly as a threshold pattern.
@@ -36,7 +36,7 @@ def halftone_field(height: int, width: int, *, cell: float = 8.0,
 
     This is the procedural equivalent of the Godot project's "Screentone"
     dither (``screentonesdf.png``): a grid of round dots laid out on a lattice
-    rotated by ``angle_deg``, where the value is the normalised distance from
+    rotated by ``angle_deg``, where the value is the normalized distance from
     the nearest dot centre (``0`` at a centre, ``1`` at a cell corner). Used as
     an ordered-dither source, thresholding it grows/shrinks the dots with the
     blend factor -- the classic newspaper halftone look.
@@ -105,7 +105,7 @@ def texture_field(height: int, width: int, texture: np.ndarray, *,
     ``scale == 1.0`` is an exact 1:1 mapping with no interpolation.
 
     Returns ``(H, W)`` for a 2-D texture or ``(H, W, C)`` preserving channels.
-    Values are normalised to ``[0, 1]``.
+    Values are normalized to ``[0, 1]``.
     """
     tex = np.asarray(texture, dtype=np.float64)
     if tex.max() > 1.0:

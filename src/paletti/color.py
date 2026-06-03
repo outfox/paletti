@@ -1,5 +1,4 @@
-"""Vectorised RGB<->HSV conversions, mirroring the GLSL helpers in the
-``palette-shader-2`` Godot project (``rgb2hsv`` / ``hsv2rgb``).
+"""Vectorized RGB<->HSV conversions
 
 All values are floats in the ``[0, 1]`` range. Arrays may have any leading
 shape as long as the final axis is the colour channel (size 3).
@@ -67,7 +66,7 @@ def rgb2hsl(rgb: np.ndarray) -> np.ndarray:
     """Convert an ``(..., 3)`` RGB array to HSL. Hue is in ``[0, 1]``.
 
     Shares hue with :func:`rgb2hsv`; lightness is the midpoint of the channel
-    extremes and saturation is normalised against that lightness.
+    extremes and saturation is normalized against that lightness.
     """
     rgb = np.asarray(rgb, dtype=np.float64)
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
@@ -78,21 +77,21 @@ def rgb2hsl(rgb: np.ndarray) -> np.ndarray:
 
     hue = np.zeros_like(maxc)
     safe = delta > 1e-12
-    rmask = safe & (maxc == r)
-    gmask = safe & (maxc == g) & ~rmask
-    bmask = safe & (maxc == b) & ~rmask & ~gmask
+    r_mask = safe & (maxc == r)
+    g_mask = safe & (maxc == g) & ~r_mask
+    b_mask = safe & (maxc == b) & ~r_mask & ~g_mask
 
     d = np.where(safe, delta, 1.0)
-    hue[rmask] = ((g - b)[rmask] / d[rmask]) % 6.0
-    hue[gmask] = ((b - r)[gmask] / d[gmask]) + 2.0
-    hue[bmask] = ((r - g)[bmask] / d[bmask]) + 4.0
+    hue[r_mask] = ((g - b)[r_mask] / d[r_mask]) % 6.0
+    hue[g_mask] = ((b - r)[g_mask] / d[g_mask]) + 2.0
+    hue[b_mask] = ((r - g)[b_mask] / d[b_mask]) + 4.0
     hue /= 6.0
     hue %= 1.0
 
     lig = (maxc + minc) / 2.0
     # S = delta / (1 - |2L - 1|), guarding the L in {0, 1} extremes.
-    denom = 1.0 - np.abs(2.0 * lig - 1.0)
-    sat = np.where(denom > 1e-12, delta / np.where(denom > 1e-12, denom, 1.0), 0.0)
+    denominator = 1.0 - np.abs(2.0 * lig - 1.0)
+    sat = np.where(denominator > 1e-12, delta / np.where(denominator > 1e-12, denominator, 1.0), 0.0)
 
     return np.stack([hue, sat, lig], axis=-1)
 
@@ -105,7 +104,7 @@ def _srgb_to_linear(c: np.ndarray) -> np.ndarray:
 def rgb2oklab(rgb: np.ndarray) -> np.ndarray:
     """Convert an ``(..., 3)`` sRGB array to OKLab (Bjorn Ottosson, 2020).
 
-    Input is treated as gamma-encoded sRGB in ``[0, 1]`` and linearised before
+    Input is treated as gamma-encoded sRGB in ``[0, 1]`` and linearized before
     the conversion, so Euclidean distance in the result approximates perceptual
     colour difference. Returns stacked ``(L, a, b)``.
     """

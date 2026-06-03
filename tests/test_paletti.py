@@ -61,7 +61,7 @@ def test_palette_from_image(tmp_path):
     Image.fromarray(px[None, :, :], "RGB").save(p)
     pal = palette_mod.from_image(p)
     assert np.allclose(pal[0], colours[0] / 255.0)
-    pal1 = palette_mod.from_image(p, max_colors=1)
+    pal1 = palette_mod.from_image(p, max_colours=1)
     assert pal1.shape == (1, 3)
 
 
