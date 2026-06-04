@@ -34,7 +34,7 @@ def from_json(data, *, assume_range: str = "auto") -> np.ndarray:
       * ``["#ff0000", "00ff00", ...]``                  -- hex strings
       * ``[[255, 0, 0], [0, 128, 64], ...]``            -- 0..255 integers
       * ``[[1.0, 0.0, 0.0], ...]``                      -- 0..1 floats
-      * ``{"colours": [...]}`` / ``{"palette": [...]}``  -- wrapped in an object
+      * ``{"colors": [...]}`` / ``{"palette": [...]}``  -- wrapped in an object
 
     ``assume_range`` controls numeric interpretation: ``"255"``, ``"unit"`` or
     ``"auto"`` (floats present or all values <= 1 -> unit, else 0..255).
@@ -91,10 +91,10 @@ def from_json_file(path: str | Path, *, assume_range: str = "auto") -> np.ndarra
         return from_json(json.load(fh), assume_range=assume_range)
 
 
-def from_image(path: str | Path, *, max_colours: int | None = None) -> np.ndarray:
+def from_image(path: str | Path, *, max_colors: int | None = None) -> np.ndarray:
     """Extract a palette from an image's distinct colours.
 
-    Colours are returned most-frequent first. ``max_colours`` caps the result to
+    Colours are returned most-frequent first. ``max_colors`` caps the result to
     the N most common colours, which is useful when importing from a palette
     strip that may contain antialiasing fringe pixels.
     """
@@ -104,8 +104,8 @@ def from_image(path: str | Path, *, max_colours: int | None = None) -> np.ndarra
     # Count occurrences of each unique colour, preserving frequency order.
     counts = Counter(map(tuple, pixels))
     ordered = [c for c, _ in counts.most_common()]
-    if max_colours is not None:
-        ordered = ordered[:max_colours]
+    if max_colors is not None:
+        ordered = ordered[:max_colors]
 
     arr = np.array(ordered, dtype=np.float64) / 255.0
     return arr
@@ -127,4 +127,4 @@ def load(spec: str, *, max_colors: int | None = None,
     path = Path(spec)
     if path.suffix.lower() == ".json":
         return from_json_file(path, assume_range=assume_range)
-    return from_image(path, max_colours=max_colors)
+    return from_image(path, max_colors=max_colors)

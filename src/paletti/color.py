@@ -91,7 +91,8 @@ def rgb2hsl(rgb: np.ndarray) -> np.ndarray:
     lig = (maxc + minc) / 2.0
     # S = delta / (1 - |2L - 1|), guarding the L in {0, 1} extremes.
     denominator = 1.0 - np.abs(2.0 * lig - 1.0)
-    sat = np.where(denominator > 1e-12, delta / np.where(denominator > 1e-12, denominator, 1.0), 0.0)
+    safe_lig = denominator > 1e-12
+    sat = np.where(safe_lig, delta / np.where(safe_lig, denominator, 1.0), 0.0)
 
     return np.stack([hue, sat, lig], axis=-1)
 
