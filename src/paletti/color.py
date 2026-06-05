@@ -28,22 +28,22 @@ def safe_divide(num: np.ndarray, denom: np.ndarray, eps: float = 1e-12) -> np.nd
 
 def rgb2hsv(rgb: np.ndarray) -> np.ndarray:
     """Convert an ``(..., 3)`` sRGB array to HSV. Hue is in ``[0, 1]``."""
-    return colour.RGB_to_HSV(np.asarray(rgb, dtype=np.float64))
+    return colour.RGB_to_HSV(rgb)
 
 
 def hsv2rgb(hsv: np.ndarray) -> np.ndarray:
     """Convert an ``(..., 3)`` HSV array (hue in ``[0, 1]``) to sRGB."""
-    return colour.HSV_to_RGB(np.asarray(hsv, dtype=np.float64))
+    return colour.HSV_to_RGB(hsv)
 
 
 def rgb2hsl(rgb: np.ndarray) -> np.ndarray:
     """Convert an ``(..., 3)`` sRGB array to HSL. Hue is in ``[0, 1]``."""
-    return colour.RGB_to_HSL(np.asarray(rgb, dtype=np.float64))
+    return colour.RGB_to_HSL(rgb)
 
 
 def hsl2rgb(hsl: np.ndarray) -> np.ndarray:
     """Convert an ``(..., 3)`` HSL array (hue in ``[0, 1]``) to sRGB."""
-    return colour.HSL_to_RGB(np.asarray(hsl, dtype=np.float64))
+    return colour.HSL_to_RGB(hsl)
 
 
 def hwb2rgb(hwb: np.ndarray) -> np.ndarray:
@@ -59,7 +59,6 @@ def hwb2rgb(hwb: np.ndarray) -> np.ndarray:
     scaled = base * (1.0 - w - b)[..., None] + w[..., None]
     total = w + b
     grey = (w / np.where(total == 0.0, 1.0, total))[..., None]
-    grey = np.broadcast_to(grey, scaled.shape)
     return np.clip(np.where((total >= 1.0)[..., None], grey, scaled), 0.0, 1.0)
 
 
@@ -69,7 +68,7 @@ def rgb2oklab(rgb: np.ndarray) -> np.ndarray:
     Euclidean distance in the result approximates perceptual colour difference,
     which is what the default matching metric relies on.
     """
-    return colour.XYZ_to_Oklab(colour.sRGB_to_XYZ(np.asarray(rgb, dtype=np.float64)))
+    return colour.XYZ_to_Oklab(colour.sRGB_to_XYZ(rgb))
 
 
 def oklab2rgb(lab: np.ndarray) -> np.ndarray:
@@ -78,8 +77,7 @@ def oklab2rgb(lab: np.ndarray) -> np.ndarray:
     OKLab can name colours outside the sRGB gamut; out-of-gamut results are
     clipped (not gamut-mapped).
     """
-    rgb = colour.XYZ_to_sRGB(colour.Oklab_to_XYZ(np.asarray(lab, dtype=np.float64)))
-    return np.clip(rgb, 0.0, 1.0)
+    return np.clip(colour.XYZ_to_sRGB(colour.Oklab_to_XYZ(lab)), 0.0, 1.0)
 
 
 def lab2rgb(lab: np.ndarray) -> np.ndarray:
@@ -88,8 +86,7 @@ def lab2rgb(lab: np.ndarray) -> np.ndarray:
     Clipped to the sRGB gamut. D65 (colour-science's default illuminant) is used
     rather than CSS's strict D50 for ``lab()``/``lch()``.
     """
-    rgb = colour.XYZ_to_sRGB(colour.Lab_to_XYZ(np.asarray(lab, dtype=np.float64)))
-    return np.clip(rgb, 0.0, 1.0)
+    return np.clip(colour.XYZ_to_sRGB(colour.Lab_to_XYZ(lab)), 0.0, 1.0)
 
 
 def lch2lab(lch: np.ndarray) -> np.ndarray:
@@ -99,7 +96,7 @@ def lch2lab(lch: np.ndarray) -> np.ndarray:
     (-> :func:`oklab2rgb`), so a single wrapper over ``LCHab_to_Lab`` serves both.
     ``H`` is in degrees.
     """
-    return colour.LCHab_to_Lab(np.asarray(lch, dtype=np.float64))
+    return colour.LCHab_to_Lab(lch)
 
 
 def rgb2luma(rgb: np.ndarray) -> np.ndarray:

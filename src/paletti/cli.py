@@ -97,11 +97,13 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_specs):
     # With mixed -p sources, --max-colors only bites if some source is an image
     # and --palette-range only if some source is JSON; flag each when no source
     # of its kind is present (e.g. a palette of bare colour tokens uses neither).
-    kinds = {palette_mod.source_kind(s) for s in palette_specs}
-    if given("max_colors") and "image" not in kinds:
-        warn("--max-colors", "only image palettes use it")
-    if given("palette_range") and "json" not in kinds:
-        warn("--palette-range", "only JSON palettes use it")
+    # Only classify the sources when one of these options was actually given.
+    if given("max_colors") or given("palette_range"):
+        kinds = {palette_mod.source_kind(s) for s in palette_specs}
+        if given("max_colors") and "image" not in kinds:
+            warn("--max-colors", "only image palettes use it")
+        if given("palette_range") and "json" not in kinds:
+            warn("--palette-range", "only JSON palettes use it")
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})

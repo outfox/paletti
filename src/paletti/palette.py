@@ -250,17 +250,14 @@ def _is_inline_json(spec: str) -> bool:
     return spec.strip()[:1] in "[{"
 
 
-def is_json_spec(spec: str) -> bool:
-    """True if ``load`` would parse ``spec`` as JSON (inline or a ``.json`` file)."""
-    return _is_inline_json(spec) or Path(spec).suffix.lower() == ".json"
-
-
 def source_kind(spec: str) -> str:
     """Classify a single :func:`load` token as ``"json"``, ``"image"`` or ``"color"``.
 
-    Mirrors :func:`load`'s dispatch without touching disk beyond an existence
-    check, so callers can tell which options (``--max-colors`` for images,
-    ``--palette-range`` for JSON) a given source will actually consume.
+    The single dispatch rule: :func:`load` branches on this to read the source,
+    and the CLI uses it to tell which options (``--max-colors`` for images,
+    ``--palette-range`` for JSON) a given source will actually consume. Touches
+    disk only for an existence check. A non-existent, non-colour token classifies
+    as ``"image"`` so :func:`load`'s error names the missing file.
     """
     s = spec.strip()
     if _is_inline_json(s) or Path(s).suffix.lower() == ".json":
@@ -278,24 +275,17 @@ def load(spec: str, *, max_colors: int | None = None,
          assume_range: str = "auto") -> np.ndarray:
     """Load a palette from a single source token.
 
-    Dispatches on the argument:
-      * a string starting with ``[`` or ``{`` is parsed as inline JSON;
-      * a ``.json`` file is parsed as JSON;
-      * an existing file is read as an image palette;
-      * otherwise a lone hex/name token (``000``, ``lavender``) is one colour;
-      * a non-existent path falls through to the image reader so its error names
-        the file.
+    Reads the source named by :func:`source_kind`: inline ``[``/``{`` JSON or a
+    ``.json`` file as JSON; an existing file as an image palette; a lone hex/name
+    token (``000``, ``lavender``) as one colour; a non-existent path through the
+    image reader so its error names the file.
     """
     s = spec.strip()
-    if _is_inline_json(s):
-        return from_json(json.loads(s), assume_range=assume_range)
-
-    path = Path(s)
-    if path.suffix.lower() == ".json":
-        return from_json_file(path, assume_range=assume_range)
-    if path.exists():
-        return from_image(path, max_colors=max_colors)
-    try:
+    kind = source_kind(s)
+    if kind == "json":
+        if _is_inline_json(s):
+            return from_json(json.loads(s), assume_range=assume_range)
+        return from_json_file(Path(s), assume_range=assume_range)
+    if kind == "color":
         return from_colors([s])
-    except ValueError:
-        return from_image(path, max_colors=max_colors)
+    return from_image(Path(s), max_colors=max_colors)
