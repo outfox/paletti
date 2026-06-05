@@ -9,16 +9,15 @@ from __future__ import annotations
 import numpy as np
 
 
-def rgb2hsv(rgb: np.ndarray) -> np.ndarray:
-    """Convert an ``(..., 3)`` RGB array to HSV. Hue is in ``[0, 1]``."""
-    rgb = np.asarray(rgb, dtype=np.float64)
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+def safe_divide(num: np.ndarray, denom: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    """Elementwise ``num / denom``, yielding ``0`` where ``|denom| <= eps``."""
+    safe = np.abs(denom) > eps
+    return np.where(safe, num / np.where(safe, denom, 1.0), 0.0)
 
-    maxc = np.max(rgb, axis=-1)
-    minc = np.min(rgb, axis=-1)
-    delta = maxc - minc
 
-    # Hue
+def _rgb_to_hue(r: np.ndarray, g: np.ndarray, b: np.ndarray,
+                maxc: np.ndarray, delta: np.ndarray) -> np.ndarray:
+    """Hue in ``[0, 1]`` from RGB channels and their max/range (grey -> 0)."""
     hue = np.zeros_like(maxc)
     # Avoid division by zero where delta == 0 (grey pixels keep hue 0).
     safe = delta > 1e-12
@@ -33,8 +32,20 @@ def rgb2hsv(rgb: np.ndarray) -> np.ndarray:
     hue[bmask] = ((r - g)[bmask] / d[bmask]) + 4.0
     hue /= 6.0
     hue %= 1.0
+    return hue
 
-    sat = np.where(maxc > 1e-12, delta / np.where(maxc > 1e-12, maxc, 1.0), 0.0)
+
+def rgb2hsv(rgb: np.ndarray) -> np.ndarray:
+    """Convert an ``(..., 3)`` RGB array to HSV. Hue is in ``[0, 1]``."""
+    rgb = np.asarray(rgb, dtype=np.float64)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+
+    maxc = np.max(rgb, axis=-1)
+    minc = np.min(rgb, axis=-1)
+    delta = maxc - minc
+
+    hue = _rgb_to_hue(r, g, b, maxc, delta)
+    sat = safe_divide(delta, maxc)
     val = maxc
 
     return np.stack([hue, sat, val], axis=-1)
@@ -75,24 +86,12 @@ def rgb2hsl(rgb: np.ndarray) -> np.ndarray:
     minc = np.min(rgb, axis=-1)
     delta = maxc - minc
 
-    hue = np.zeros_like(maxc)
-    safe = delta > 1e-12
-    r_mask = safe & (maxc == r)
-    g_mask = safe & (maxc == g) & ~r_mask
-    b_mask = safe & (maxc == b) & ~r_mask & ~g_mask
-
-    d = np.where(safe, delta, 1.0)
-    hue[r_mask] = ((g - b)[r_mask] / d[r_mask]) % 6.0
-    hue[g_mask] = ((b - r)[g_mask] / d[g_mask]) + 2.0
-    hue[b_mask] = ((r - g)[b_mask] / d[b_mask]) + 4.0
-    hue /= 6.0
-    hue %= 1.0
+    hue = _rgb_to_hue(r, g, b, maxc, delta)
 
     lig = (maxc + minc) / 2.0
     # S = delta / (1 - |2L - 1|), guarding the L in {0, 1} extremes.
     denominator = 1.0 - np.abs(2.0 * lig - 1.0)
-    safe_lig = denominator > 1e-12
-    sat = np.where(safe_lig, delta / np.where(safe_lig, denominator, 1.0), 0.0)
+    sat = safe_divide(delta, denominator)
 
     return np.stack([hue, sat, lig], axis=-1)
 

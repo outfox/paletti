@@ -107,8 +107,27 @@ def from_image(path: str | Path, *, max_colors: int | None = None) -> np.ndarray
     if max_colors is not None:
         ordered = ordered[:max_colors]
 
-    arr = np.array(ordered, dtype=np.float64) / 255.0
-    return arr
+    return np.array(ordered, dtype=np.float64) / 255.0
+
+
+def half_brite(pal: np.ndarray) -> np.ndarray:
+    """Append a half-brightness copy of every colour, Amiga "Extra Half-Brite".
+
+    Each colour gains a twin at half its RGB value (halving the channels halves
+    luminance while keeping hue and saturation), doubling an ``(N, 3)`` palette to
+    ``(2N, 3)``. The dimmed copies follow the originals in order.
+    """
+    return np.vstack([pal, pal * 0.5])
+
+
+def _is_inline_json(spec: str) -> bool:
+    """True if ``spec`` is an inline JSON array/object rather than a path."""
+    return spec.strip()[:1] in "[{"
+
+
+def is_json_spec(spec: str) -> bool:
+    """True if ``load`` would parse ``spec`` as JSON (inline or a ``.json`` file)."""
+    return _is_inline_json(spec) or Path(spec).suffix.lower() == ".json"
 
 
 def load(spec: str, *, max_colors: int | None = None,
@@ -120,9 +139,8 @@ def load(spec: str, *, max_colors: int | None = None,
       * a ``.json`` file is parsed as JSON;
       * anything else is treated as an image path.
     """
-    text = spec.strip()
-    if text[:1] in "[{":
-        return from_json(json.loads(text), assume_range=assume_range)
+    if _is_inline_json(spec):
+        return from_json(json.loads(spec.strip()), assume_range=assume_range)
 
     path = Path(spec)
     if path.suffix.lower() == ".json":

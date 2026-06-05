@@ -23,14 +23,6 @@ def _parse_triplet(_0, _1, value):
         raise click.BadParameter(str(exc))
 
 
-def _palette_is_json(spec: str) -> bool:
-    """Mirror ``palette.load``'s dispatch: inline JSON or a ``.json`` file."""
-    text = spec.strip()
-    if text[:1] in "[{":
-        return True
-    return Path(spec).suffix.lower() == ".json"
-
-
 def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
     """Warn (on stderr) for each explicitly-set option the run will ignore.
 
@@ -70,7 +62,7 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
     if given("hsv_weights") and metric != "hsv":
         warn("--hsv-weights", "only --metric hsv uses it")
 
-    if _palette_is_json(palette_spec):
+    if palette_mod.is_json_spec(palette_spec):
         if given("max_colors"):
             warn("--max-colors", "only image palettes use it")
     else:
@@ -118,6 +110,9 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
 @click.option("--palette-range", type=click.Choice(["auto", "unit", "255"]),
               default="auto", show_default=True,
               help="How to interpret numeric JSON palette values.")
+@click.option("-ehb", "--extra-half-brite", "extra_half_brite", is_flag=True,
+              help="Double the palette by adding a half-brightness copy of every "
+                   "colour (Amiga Extra-Half-Brite) before matching.")
 @click.option("--res", type=float, default=2.0, show_default=True,
               help="Dither cell size in pixels / pattern frequency. For "
                    "--dither halftone this is the dot spacing (try 6-12).")
@@ -151,8 +146,9 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
                    "matching. Identity is 0,1,1.")
 @click.pass_context
 def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
-         metric, blur, denoise, max_colors, palette_range, res, bayer, angle,
-         texture, scale, antialias, prefer_smallest, hsv_weights, hsv_adjust):
+         metric, blur, denoise, max_colors, palette_range, extra_half_brite,
+         res, bayer, angle, texture, scale, antialias, prefer_smallest,
+         hsv_weights, hsv_adjust):
     """Apply a colour PALETTE to an image.
 
     By default, each pixel snaps to its nearest palette colour. Use --blend for a
@@ -192,6 +188,9 @@ def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
 
     if pal.shape[0] == 0:
         raise click.ClickException("palette has no colours")
+
+    if extra_half_brite:
+        pal = palette_mod.half_brite(pal)
 
     image_rgb, alpha = imageio.load_rgb(input_image)
 

@@ -120,6 +120,9 @@ paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
   that grows with the value (try `~0.5`-`1.5`).
 - `--prefer-smallest` — when dithering, bias toward the darker of the two
   colours.
+- `-ehb` / `--extra-half-brite` — double the palette by appending a
+  half-brightness copy of every colour (the Amiga "Extra-Half-Brite" trick)
+  before matching, giving a free set of darker shades.
 
 Transparency in the source image is preserved.
 

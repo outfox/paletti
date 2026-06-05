@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 from . import color, dither
 
@@ -60,24 +61,23 @@ def _hue_dist(h0: np.ndarray, h1: np.ndarray) -> np.ndarray:
     return np.minimum(d, 1.0 - d)
 
 
-def _to_metric_space(rgb: np.ndarray, metric: str) -> np.ndarray:
-    """Project an ``(..., 3)`` RGB array into the feature space of ``metric``.
+# Per-metric projection from RGB into the space distances are measured in.
+# Cylindrical metrics keep their channel layout (hue stays in channel 0 so the
+# distance step can treat it on its circle); ``hue`` and ``luma`` collapse to a
+# single trailing axis.
+_METRIC_SPACE = {
+    "oklab": color.rgb2oklab,
+    "hsv": color.rgb2hsv,
+    "hsl": color.rgb2hsl,
+    "hue": lambda rgb: color.rgb2hsv(rgb)[..., 0],
+    "luma": color.rgb2luma,
+    "rgb": lambda rgb: np.asarray(rgb, dtype=np.float64),
+}
 
-    Cylindrical metrics keep their channel layout (hue stays in channel 0 so the
-    distance step can treat it on its circle); ``hue`` and ``luma`` collapse to a
-    single trailing axis.
-    """
-    if metric == "oklab":
-        return color.rgb2oklab(rgb)
-    if metric == "hsv":
-        return color.rgb2hsv(rgb)
-    if metric == "hsl":
-        return color.rgb2hsl(rgb)
-    if metric == "hue":
-        return color.rgb2hsv(rgb)[..., 0]
-    if metric == "luma":
-        return color.rgb2luma(rgb)
-    return np.asarray(rgb, dtype=np.float64)  # rgb
+
+def _to_metric_space(rgb: np.ndarray, metric: str) -> np.ndarray:
+    """Project an ``(..., 3)`` RGB array into the feature space of ``metric``."""
+    return _METRIC_SPACE[metric](rgb)
 
 
 def _two_nearest(pixels: np.ndarray, palette: np.ndarray,
@@ -153,24 +153,10 @@ def _gaussian_blur(image: np.ndarray, sigma: float) -> np.ndarray:
     """
     if sigma <= 0.0:
         return image
-    radius = max(1, int(round(sigma * 3.0)))
-    xs = np.arange(-radius, radius + 1)
-    kernel = np.exp(-(xs * xs) / (2.0 * sigma * sigma))
-    kernel /= kernel.sum()
-
-    def conv(arr: np.ndarray, axis: int) -> np.ndarray:
-        pad = [(0, 0)] * arr.ndim
-        pad[axis] = (radius, radius)
-        padded = np.pad(arr, pad, mode="edge")
-        n = arr.shape[axis]
-        out = np.zeros_like(arr)
-        for i, weight in enumerate(kernel):
-            sl = [slice(None)] * arr.ndim
-            sl[axis] = slice(i, i + n)
-            out += weight * padded[tuple(sl)]
-        return out
-
-    return conv(conv(image, 0), 1)
+    # Blur only the two spatial axes (sigma 0 on the channel axis keeps channels
+    # independent); 'nearest' edge handling avoids border darkening.
+    return gaussian_filter(image, sigma=(sigma, sigma, 0), mode="nearest",
+                           truncate=3.0)
 
 
 def _denoise(image: np.ndarray, strength: float) -> np.ndarray:
@@ -258,10 +244,7 @@ def apply(image: np.ndarray, palette: np.ndarray, opts: Options) -> np.ndarray:
         # 1/3 per channel to decorrelate (which dissolves banding for bayer/noise).
         idx_a, idx_b = _two_nearest(pixels, palette, opts)
         a, b = palette[idx_a], palette[idx_b]
-        denominator = b - a
-        safe = np.abs(denominator) > 1e-9
-        t = np.clip(np.where(safe, (pixels - a) / np.where(safe, denominator, 1.0), 0.0),
-                    0.0, 1.0)
+        t = np.clip(color.safe_divide(pixels - a, b - a, eps=1e-9), 0.0, 1.0)
         field_rgb = _make_field_rgb(opts, h, w)
         target = a + (t + field_rgb - 1.0 >= 0.0) * (b - a)
         snap, _ = _two_nearest(target, palette, opts)

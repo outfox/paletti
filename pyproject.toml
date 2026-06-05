@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=2.4.6",
     "pillow>=12.2.0",
     "scikit-image>=0.25.0",
+    "scipy>=1.11",
 ]
 
 [project.scripts]

@@ -134,6 +134,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pillow" },
     { name = "scikit-image" },
+    { name = "scipy" },
 ]
 
 [package.dev-dependencies]
@@ -147,6 +148,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "scikit-image", specifier = ">=0.25.0" },
+    { name = "scipy", specifier = ">=1.11" },
 ]
 
 [package.metadata.requires-dev]

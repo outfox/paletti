@@ -48,6 +48,14 @@ def test_palette_object_wrapper():
     assert np.allclose(pal, [[0, 0, 0], [1, 1, 1]])
 
 
+def test_half_brite_appends_dimmed_copies():
+    pal = palette_mod.from_json([[1.0, 0.5, 0.0], [0.2, 0.4, 0.8]])
+    ehb = palette_mod.half_brite(pal)
+    assert ehb.shape == (4, 3)
+    assert np.allclose(ehb[:2], pal)          # originals first, unchanged
+    assert np.allclose(ehb[2:], pal * 0.5)    # half-brightness twins follow
+
+
 def test_palette_bad_hex():
     with pytest.raises(ValueError):
         palette_mod.from_json(["nothex"])
@@ -469,6 +477,15 @@ def test_cli_modes_derived_from_flags(tmp_path):
     # The reported mode reflects the derived selection.
     assert "(dither-rgb/" in _run_cli(tmp_path, "--dither", "bayer", "--rgb")[0].output
     assert "(blend/" in _run_cli(tmp_path, "--blend")[0].output
+
+
+def test_cli_extra_half_brite_doubles_palette(tmp_path):
+    # The 2-colour palette becomes 4 (each colour plus a half-brightness twin),
+    # which the run reports in its summary line.
+    result, out = _run_cli(tmp_path, "-ehb")
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    assert "4-colour palette" in result.output
 
 
 def test_cli_blend_and_dither_mutually_exclusive(tmp_path):
