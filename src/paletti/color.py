@@ -1,12 +1,23 @@
-"""Vectorized RGB<->HSV conversions
+"""Vectorized colour-space conversions.
 
-All values are floats in the ``[0, 1]`` range. Arrays may have any leading
-shape as long as the final axis is the colour channel (size 3).
+Thin wrappers over `colour-science <https://www.colour-science.org/>`__ so the
+project has one well-tested source of truth for the colour maths. All values are
+floats in the ``[0, 1]`` range (hue included) unless noted; CIELAB ``L`` is in
+``[0, 100]`` and Lab/LCh hues are in degrees, matching CSS conventions. Arrays may
+have any leading shape as long as the final axis is the colour channel (size 3).
 """
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
+
+# colour-science warns once at import when Matplotlib is absent; we never use its
+# plotting, so silence that specific notice to keep CLI output clean.
+warnings.filterwarnings("ignore", message=r'.*"Matplotlib".*')
+
+import colour  # noqa: E402  (import after the warning filter is intentional)
 
 
 def safe_divide(num: np.ndarray, denom: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -15,120 +26,88 @@ def safe_divide(num: np.ndarray, denom: np.ndarray, eps: float = 1e-12) -> np.nd
     return np.where(safe, num / np.where(safe, denom, 1.0), 0.0)
 
 
-def _rgb_to_hue(r: np.ndarray, g: np.ndarray, b: np.ndarray,
-                maxc: np.ndarray, delta: np.ndarray) -> np.ndarray:
-    """Hue in ``[0, 1]`` from RGB channels and their max/range (grey -> 0)."""
-    hue = np.zeros_like(maxc)
-    # Avoid division by zero where delta == 0 (grey pixels keep hue 0).
-    safe = delta > 1e-12
-    # Masks for which channel is the maximum.
-    rmask = safe & (maxc == r)
-    gmask = safe & (maxc == g) & ~rmask
-    bmask = safe & (maxc == b) & ~rmask & ~gmask
-
-    d = np.where(safe, delta, 1.0)  # placeholder denominator to avoid /0
-    hue[rmask] = ((g - b)[rmask] / d[rmask]) % 6.0
-    hue[gmask] = ((b - r)[gmask] / d[gmask]) + 2.0
-    hue[bmask] = ((r - g)[bmask] / d[bmask]) + 4.0
-    hue /= 6.0
-    hue %= 1.0
-    return hue
-
-
 def rgb2hsv(rgb: np.ndarray) -> np.ndarray:
-    """Convert an ``(..., 3)`` RGB array to HSV. Hue is in ``[0, 1]``."""
-    rgb = np.asarray(rgb, dtype=np.float64)
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-
-    maxc = np.max(rgb, axis=-1)
-    minc = np.min(rgb, axis=-1)
-    delta = maxc - minc
-
-    hue = _rgb_to_hue(r, g, b, maxc, delta)
-    sat = safe_divide(delta, maxc)
-    val = maxc
-
-    return np.stack([hue, sat, val], axis=-1)
+    """Convert an ``(..., 3)`` sRGB array to HSV. Hue is in ``[0, 1]``."""
+    return colour.RGB_to_HSV(np.asarray(rgb, dtype=np.float64))
 
 
 def hsv2rgb(hsv: np.ndarray) -> np.ndarray:
-    """Convert an ``(..., 3)`` HSV array (hue in ``[0, 1]``) to RGB."""
-    hsv = np.asarray(hsv, dtype=np.float64)
-    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-
-    h = (h % 1.0) * 6.0
-    i = np.floor(h).astype(int)
-    f = h - i
-    p = v * (1.0 - s)
-    q = v * (1.0 - s * f)
-    t = v * (1.0 - s * (1.0 - f))
-
-    i = i % 6
-    r = np.select([i == 0, i == 1, i == 2, i == 3, i == 4, i == 5],
-                  [v, q, p, p, t, v])
-    g = np.select([i == 0, i == 1, i == 2, i == 3, i == 4, i == 5],
-                  [t, v, v, q, p, p])
-    b = np.select([i == 0, i == 1, i == 2, i == 3, i == 4, i == 5],
-                  [p, p, t, v, v, q])
-    return np.stack([r, g, b], axis=-1)
+    """Convert an ``(..., 3)`` HSV array (hue in ``[0, 1]``) to sRGB."""
+    return colour.HSV_to_RGB(np.asarray(hsv, dtype=np.float64))
 
 
 def rgb2hsl(rgb: np.ndarray) -> np.ndarray:
-    """Convert an ``(..., 3)`` RGB array to HSL. Hue is in ``[0, 1]``.
+    """Convert an ``(..., 3)`` sRGB array to HSL. Hue is in ``[0, 1]``."""
+    return colour.RGB_to_HSL(np.asarray(rgb, dtype=np.float64))
 
-    Shares hue with :func:`rgb2hsv`; lightness is the midpoint of the channel
-    extremes and saturation is normalized against that lightness.
+
+def hsl2rgb(hsl: np.ndarray) -> np.ndarray:
+    """Convert an ``(..., 3)`` HSL array (hue in ``[0, 1]``) to sRGB."""
+    return colour.HSL_to_RGB(np.asarray(hsl, dtype=np.float64))
+
+
+def hwb2rgb(hwb: np.ndarray) -> np.ndarray:
+    """Convert an ``(..., 3)`` HWB array (hue in ``[0, 1]``) to sRGB.
+
+    HWB mixes a pure hue with whiteness ``w`` and blackness ``b``; when
+    ``w + b >= 1`` the colour collapses to the grey ``w / (w + b)``. (colour-science
+    has no HWB model, so this stays a direct construction.)
     """
-    rgb = np.asarray(rgb, dtype=np.float64)
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-
-    maxc = np.max(rgb, axis=-1)
-    minc = np.min(rgb, axis=-1)
-    delta = maxc - minc
-
-    hue = _rgb_to_hue(r, g, b, maxc, delta)
-
-    lig = (maxc + minc) / 2.0
-    # S = delta / (1 - |2L - 1|), guarding the L in {0, 1} extremes.
-    denominator = 1.0 - np.abs(2.0 * lig - 1.0)
-    sat = safe_divide(delta, denominator)
-
-    return np.stack([hue, sat, lig], axis=-1)
-
-
-def _srgb_to_linear(c: np.ndarray) -> np.ndarray:
-    """Undo the sRGB transfer function on ``[0, 1]`` values."""
-    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    hwb = np.asarray(hwb, dtype=np.float64)
+    h, w, b = hwb[..., 0], hwb[..., 1], hwb[..., 2]
+    base = hsv2rgb(np.stack([h, np.ones_like(h), np.ones_like(h)], axis=-1))
+    scaled = base * (1.0 - w - b)[..., None] + w[..., None]
+    total = w + b
+    grey = (w / np.where(total == 0.0, 1.0, total))[..., None]
+    grey = np.broadcast_to(grey, scaled.shape)
+    return np.clip(np.where((total >= 1.0)[..., None], grey, scaled), 0.0, 1.0)
 
 
 def rgb2oklab(rgb: np.ndarray) -> np.ndarray:
-    """Convert an ``(..., 3)`` sRGB array to OKLab (Bjorn Ottosson, 2020).
+    """Convert an ``(..., 3)`` sRGB array to OKLab (perceptual; ``L`` in ``[0, 1]``).
 
-    Input is treated as gamma-encoded sRGB in ``[0, 1]`` and linearized before
-    the conversion, so Euclidean distance in the result approximates perceptual
-    colour difference. Returns stacked ``(L, a, b)``.
+    Euclidean distance in the result approximates perceptual colour difference,
+    which is what the default matching metric relies on.
     """
-    rgb = np.asarray(rgb, dtype=np.float64)
-    lin = _srgb_to_linear(rgb)
-    r, g, b = lin[..., 0], lin[..., 1], lin[..., 2]
+    return colour.XYZ_to_Oklab(colour.sRGB_to_XYZ(np.asarray(rgb, dtype=np.float64)))
 
-    lms_l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
-    lms_m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
-    lms_s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
 
-    l_ = np.cbrt(lms_l)
-    m_ = np.cbrt(lms_m)
-    s_ = np.cbrt(lms_s)
+def oklab2rgb(lab: np.ndarray) -> np.ndarray:
+    """Convert an ``(..., 3)`` OKLab array back to sRGB, clipped to ``[0, 1]``.
 
-    big_l = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
-    a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
-    bb = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    OKLab can name colours outside the sRGB gamut; out-of-gamut results are
+    clipped (not gamut-mapped).
+    """
+    rgb = colour.XYZ_to_sRGB(colour.Oklab_to_XYZ(np.asarray(lab, dtype=np.float64)))
+    return np.clip(rgb, 0.0, 1.0)
 
-    return np.stack([big_l, a, bb], axis=-1)
+
+def lab2rgb(lab: np.ndarray) -> np.ndarray:
+    """Convert an ``(..., 3)`` CIELAB array (D65, ``L`` in ``[0, 100]``) to sRGB.
+
+    Clipped to the sRGB gamut. D65 (colour-science's default illuminant) is used
+    rather than CSS's strict D50 for ``lab()``/``lch()``.
+    """
+    rgb = colour.XYZ_to_sRGB(colour.Lab_to_XYZ(np.asarray(lab, dtype=np.float64)))
+    return np.clip(rgb, 0.0, 1.0)
+
+
+def lch2lab(lch: np.ndarray) -> np.ndarray:
+    """Polar -> Cartesian: an ``(..., 3)`` ``(L, C, H_deg)`` to ``(L, a, b)``.
+
+    The polar transform is identical for CIELCh (-> :func:`lab2rgb`) and OKLCh
+    (-> :func:`oklab2rgb`), so a single wrapper over ``LCHab_to_Lab`` serves both.
+    ``H`` is in degrees.
+    """
+    return colour.LCHab_to_Lab(np.asarray(lch, dtype=np.float64))
 
 
 def rgb2luma(rgb: np.ndarray) -> np.ndarray:
-    """Rec. 709 relative luminance of an ``(..., 3)`` RGB array (``[0, 1]``)."""
+    """Rec. 709 luma of an ``(..., 3)`` RGB array (weighted sum on ``[0, 1]``).
+
+    A cheap one-dimensional matching axis; deliberately the gamma-domain *luma*,
+    not relative luminance, so it is kept as a direct weighted sum.
+    """
     rgb = np.asarray(rgb, dtype=np.float64)
     return 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
 

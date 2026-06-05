@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "click>=8.4.1",
+    "colour-science>=0.4.7",
     "numpy>=2.4.6",
     "pillow>=12.2.0",
     "scikit-image>=0.25.0",

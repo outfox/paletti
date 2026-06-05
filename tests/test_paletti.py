@@ -26,6 +26,42 @@ def test_rgb2hsv_known_values():
     assert np.allclose(hsv[:, 2], 1.0)
 
 
+def test_hsl2rgb_roundtrip_and_inverts_rgb2hsl():
+    rng = np.random.default_rng(5)
+    rgb = rng.random((500, 3))
+    assert np.abs(color.hsl2rgb(color.rgb2hsl(rgb)) - rgb).max() < 1e-9
+
+
+def test_oklab2rgb_inverts_rgb2oklab():
+    rng = np.random.default_rng(6)
+    rgb = rng.random((500, 3))
+    # colour-science routes via XYZ with two matrix inversions, so the round-trip
+    # is slightly looser than a fused transform -- still imperceptible (<0.1/255).
+    assert np.abs(color.oklab2rgb(color.rgb2oklab(rgb)) - rgb).max() < 1e-3
+
+
+def test_lab2rgb_reference_values():
+    # CIELAB (D65) coordinates of the sRGB primaries / white.
+    lab = np.array([[100.0, 0.0, 0.0], [53.2408, 80.0925, 67.2032],
+                    [87.7347, -86.1827, 83.1793]])
+    rgb = color.lab2rgb(lab)
+    assert np.allclose(rgb, [[1, 1, 1], [1, 0, 0], [0, 1, 0]], atol=2e-3)
+
+
+def test_lch2lab_is_polar_form():
+    # a = C*cos(H), b = C*sin(H); H in degrees.
+    lab = color.lch2lab(np.array([[50.0, 10.0, 0.0], [50.0, 10.0, 90.0]]))
+    assert np.allclose(lab[0], [50.0, 10.0, 0.0], atol=1e-9)
+    assert np.allclose(lab[1], [50.0, 0.0, 10.0], atol=1e-9)
+
+
+def test_hwb2rgb_known_values():
+    # pure hue, all-white, all-black, and the w+b>1 grey collapse.
+    out = color.hwb2rgb(np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0],
+                                  [0.0, 0.0, 1.0], [0.0, 0.5, 0.5]]))
+    assert np.allclose(out, [[1, 0, 0], [1, 1, 1], [0, 0, 0], [0.5, 0.5, 0.5]])
+
+
 # --- palette loading -------------------------------------------------------
 
 def test_palette_hex():
@@ -59,6 +95,78 @@ def test_half_brite_appends_dimmed_copies():
 def test_palette_bad_hex():
     with pytest.raises(ValueError):
         palette_mod.from_json(["nothex"])
+
+
+def test_parse_color_hex_and_name_forms():
+    # Every spelling a -p colour token (and JSON strings) accept -> same RGB.
+    for token in ("#ffffff", "ffffff", "#fff", "fff", "white", "WHITE"):
+        assert np.allclose(palette_mod.parse_color(token), [1, 1, 1])
+    assert np.allclose(palette_mod.parse_color("000"), [0, 0, 0])
+    assert np.allclose(palette_mod.parse_color("#ff0000"), [1, 0, 0])
+    with pytest.raises(ValueError):
+        palette_mod.parse_color("definitely-not-a-colour")
+
+
+def test_parse_color_css_functions():
+    near = lambda a, b: np.allclose(palette_mod.parse_color(a), b, atol=2e-3)
+    # rgb / hsl / hsv in both comma and modern space-separated CSS Color 4 forms.
+    assert near("rgb(255,0,0)", [1, 0, 0])
+    assert near("rgb(100% 0% 0%)", [1, 0, 0])
+    assert near("rgb(255 0 0 / 50%)", [1, 0, 0])        # alpha is dropped
+    assert near("hsl(120 100% 50%)", [0, 1, 0])
+    assert near("hsl(120deg 100% 50%)", [0, 1, 0])
+    assert near("hsl(0.5turn 100% 50%)", [0, 1, 1])     # 0.5turn = 180deg = cyan
+    assert near("hsv(120 100% 100%)", [0, 1, 0])
+    assert near("hwb(0 0% 0%)", [1, 0, 0])
+    assert near("hwb(0 50% 50%)", [0.5, 0.5, 0.5])
+    # Lab / LCH / OKLab / OKLCh against known sRGB-red coordinates.
+    assert near("lab(53.24 80.09 67.20)", [1, 0, 0])
+    assert near("lab(53.24% 80.09 67.20)", [1, 0, 0])
+    assert near("lch(53.24 104.55 40)", [1, 0, 0])
+    assert near("oklab(0.628 0.225 0.126)", [1, 0, 0])
+    assert near("oklch(0.628 0.2577 29.23)", [1, 0, 0])
+    # 'none' reads as zero; names and hex are unaffected by the new path.
+    assert near("rgb(255 none none)", [1, 0, 0])
+    assert near("rebeccapurple", [0.4, 0.2, 0.6])
+
+
+def test_parse_color_malformed_function_raises():
+    for bad in ("rgb(255,0)", "oklab(nope)", "hsl(120 100%)"):
+        with pytest.raises(ValueError):
+            palette_mod.parse_color(bad)
+
+
+def test_from_colors_builds_palette():
+    pal = palette_mod.from_colors(["FFFFFF", "000000", "red"])
+    assert np.allclose(pal, [[1, 1, 1], [0, 0, 0], [1, 0, 0]])
+    with pytest.raises(ValueError):
+        palette_mod.from_colors([])
+
+
+def test_palette_json_accepts_names():
+    # JSON string entries share parse_color, so names work there too.
+    pal = palette_mod.from_json(["white", "#000"])
+    assert np.allclose(pal, [[1, 1, 1], [0, 0, 0]])
+
+
+def test_load_dispatches_bare_colour_tokens():
+    # A lone hex/name token is loaded as a single-colour palette.
+    assert np.allclose(palette_mod.load("000"), [[0, 0, 0]])
+    assert np.allclose(palette_mod.load("#ff0000"), [[1, 0, 0]])
+    assert np.allclose(palette_mod.load("white"), [[1, 1, 1]])
+
+
+def test_source_kind_classification(tmp_path):
+    img = tmp_path / "pal.png"
+    Image.fromarray(np.zeros((1, 1, 3), np.uint8), "RGB").save(img)
+    assert palette_mod.source_kind('["#fff"]') == "json"
+    assert palette_mod.source_kind("pal.json") == "json"
+    assert palette_mod.source_kind(str(img)) == "image"
+    assert palette_mod.source_kind("000") == "color"
+    assert palette_mod.source_kind("lavender") == "color"
+    # An existing file wins over a colour-shaped name; a missing image path is
+    # still treated as an image (so its load error names the file).
+    assert palette_mod.source_kind("missing.png") == "image"
 
 
 def test_palette_from_image(tmp_path):
@@ -509,6 +617,55 @@ def test_cli_warns_on_unused_options(tmp_path):
     result, _ = _run_cli(tmp_path, "--hsv-weights", "2,1,1")
     assert result.exit_code == 0, result.output
     assert "--hsv-weights ignored" in result.stderr
+
+
+def test_cli_palette_repeatable_and_variadic(tmp_path):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = tmp_path / "in.png"
+    Image.fromarray((_img() * 255).astype(np.uint8), "RGB").save(inp)
+    out = tmp_path / "out.png"
+
+    # Repeated -p flags accumulate.
+    r = CliRunner().invoke(
+        main, [str(inp), str(out), "-p", "000", "-p", "ffffff"])
+    assert r.exit_code == 0, r.output
+    assert "2-colour palette" in r.output
+
+    # A single -p taking a variadic list of mixed sources, incl. a JSON file.
+    pal = tmp_path / "pal.json"
+    pal.write_text('["#112233", "#445566"]')
+    r = CliRunner().invoke(
+        main, [str(inp), str(out), "-p", "000", str(pal), "ffffff", "lavender"])
+    assert r.exit_code == 0, r.output
+    # 1 (000) + 2 (json file) + 1 (ffffff) + 1 (lavender) = 5.
+    assert "5-colour palette" in r.output
+
+
+def test_cli_palette_bad_source_names_it(tmp_path):
+    result, _ = _run_cli(tmp_path, "-p", "nope.png")
+    assert result.exit_code != 0
+    assert "could not load palette 'nope.png'" in result.output
+
+
+def test_cli_requires_a_palette_source(tmp_path):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = tmp_path / "in.png"
+    Image.fromarray((_img() * 255).astype(np.uint8), "RGB").save(inp)
+    result = CliRunner().invoke(main, [str(inp)])
+    assert result.exit_code != 0
+    assert "no palette given" in result.output
+
+
+def test_cli_palette_rejects_bad_colour_token(tmp_path):
+    # A bare token that is neither a file nor a colour falls through to the image
+    # reader, whose error names the offending source.
+    result, _ = _run_cli(tmp_path, "notacolour")
+    assert result.exit_code != 0
+    assert "could not load palette 'notacolour'" in result.output
 
 
 def test_cli_denoise_runs_without_warning(tmp_path):

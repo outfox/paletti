@@ -5,9 +5,41 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import numpy as np
 
 from . import core, imageio, palette as palette_mod
 from .core import DITHER_KINDS, METRICS
+
+
+class _EatAllOption(click.Option):
+    """An option that greedily collects every following non-option token.
+
+    Click options are otherwise fixed-arity, so this is what lets ``-p`` take a
+    whole space-separated list -- ``-p 000 pal.json lospec.png`` -- instead of
+    forcing one ``-p`` per source. Consumption stops at the next option-like token
+    (one starting with ``-``), so later flags are untouched; it does, however,
+    also swallow positional arguments that follow it, so ``-p`` is best placed
+    after the input/output paths.
+    """
+
+    def add_to_parser(self, parser, ctx):
+        super().add_to_parser(parser, ctx)
+        for name in self.opts:
+            parser_opt = parser._long_opt.get(name) or parser._short_opt.get(name)
+            if parser_opt is None:
+                continue
+            consume_one = parser_opt.process
+
+            def process(value, state, _consume_one=consume_one):
+                _consume_one(value, state)
+                while state.rargs:
+                    nxt = state.rargs[0]
+                    if nxt[:1] == "-" and nxt != "-":
+                        break
+                    _consume_one(state.rargs.pop(0), state)
+
+            parser_opt.process = process
+            break
 
 
 def _parse_triplet(_0, _1, value):
@@ -23,7 +55,7 @@ def _parse_triplet(_0, _1, value):
         raise click.BadParameter(str(exc))
 
 
-def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
+def _warn_unused(ctx, *, mode, dither_kind, metric, palette_specs):
     """Warn (on stderr) for each explicitly-set option the run will ignore.
 
     Options silently flowed into ``core.Options`` regardless of mode before; now
@@ -62,21 +94,29 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
     if given("hsv_weights") and metric != "hsv":
         warn("--hsv-weights", "only --metric hsv uses it")
 
-    if palette_mod.is_json_spec(palette_spec):
-        if given("max_colors"):
-            warn("--max-colors", "only image palettes use it")
-    else:
-        if given("palette_range"):
-            warn("--palette-range", "only JSON palettes use it")
+    # With mixed -p sources, --max-colors only bites if some source is an image
+    # and --palette-range only if some source is JSON; flag each when no source
+    # of its kind is present (e.g. a palette of bare colour tokens uses neither).
+    kinds = {palette_mod.source_kind(s) for s in palette_specs}
+    if given("max_colors") and "image" not in kinds:
+        warn("--max-colors", "only image palettes use it")
+    if given("palette_range") and "json" not in kinds:
+        warn("--palette-range", "only JSON palettes use it")
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("input_image", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument("output_image", required=False, default=None,
                 type=click.Path(dir_okay=False, path_type=Path))
-@click.option("-p", "--palette", "palette_spec", required=True, metavar="SPEC",
-              help="Palette source: an image path, a .json file, or an inline "
-                   "JSON array such as '[\"#1a1c2c\",\"#5d275d\"]'.")
+@click.option("-p", "--palette", "palette_specs", cls=_EatAllOption,
+              multiple=True, default=(), metavar="SPEC...",
+              help="Palette source(s): an image path, a .json file, an inline "
+                   "JSON array such as '[\"#1a1c2c\",\"#5d275d\"]', or a bare "
+                   "hex/name colour ('000', 'lavender'). Repeatable and variadic "
+                   "-- '-p 000 -p pal.json' or '-p 000 pal.json lospec.png "
+                   "lavender'; every source is concatenated into one palette. "
+                   "Place it after the image paths as it eats the values that "
+                   "follow it.")
 @click.option("--blend", is_flag=True,
               help="Smoothly lerp between the two nearest palette colours "
                    "instead of snapping to the closest (the default).")
@@ -145,10 +185,10 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_spec):
               help="Pre-shift hue (add) and scale sat/val (multiply) before "
                    "matching. Identity is 0,1,1.")
 @click.pass_context
-def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
-         metric, blur, denoise, max_colors, palette_range, extra_half_brite,
-         res, bayer, angle, texture, scale, antialias, prefer_smallest,
-         hsv_weights, hsv_adjust):
+def main(ctx, input_image, output_image, palette_specs, blend,
+         dither_kind, rgb, metric, blur, denoise, max_colors, palette_range,
+         extra_half_brite, res, bayer, angle, texture, scale, antialias,
+         prefer_smallest, hsv_weights, hsv_adjust):
     """Apply a colour PALETTE to an image.
 
     By default, each pixel snaps to its nearest palette colour. Use --blend for a
@@ -163,6 +203,8 @@ def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
       paletti in.png -p palette.png                    # -> paletti-in.png
       paletti in.png out.png -p sweetie16.json --dither bayer --bayer 8
       paletti in.png out.png -p '[[26,28,44],[93,39,93]]' --blend
+      paletti in.png out.png -p 000 pal.json lospec.png lavender  # mixed sources
+      paletti in.png out.png -p base.json FFFFFF 000000  # augment a palette
     """
     if blend and dither_kind:
         raise click.ClickException("--blend and --dither are mutually exclusive")
@@ -173,18 +215,27 @@ def main(ctx, input_image, output_image, palette_spec, blend, dither_kind, rgb,
     else:
         mode = "nearest"
 
+    if not palette_specs:
+        raise click.UsageError(
+            "no palette given: provide a source with -p/--palette"
+        )
+
     _warn_unused(ctx, mode=mode, dither_kind=dither_kind, metric=metric,
-                 palette_spec=palette_spec)
+                 palette_specs=palette_specs)
 
     if output_image is None:
         output_image = input_image.with_name(f"paletti-{input_image.stem}.png")
 
-    try:
-        pal = palette_mod.load(
-            palette_spec, max_colors=max_colors, assume_range=palette_range
-        )
-    except (OSError, ValueError) as exc:
-        raise click.ClickException(f"could not load palette: {exc}")
+    # Build the palette from every -p source, in order.
+    parts = []
+    for spec in palette_specs:
+        try:
+            parts.append(palette_mod.load(
+                spec, max_colors=max_colors, assume_range=palette_range
+            ))
+        except (OSError, ValueError) as exc:
+            raise click.ClickException(f"could not load palette {spec!r}: {exc}")
+    pal = np.vstack(parts)
 
     if pal.shape[0] == 0:
         raise click.ClickException("palette has no colours")

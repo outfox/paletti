@@ -28,16 +28,48 @@ paletti INPUT [OUTPUT] -p PALETTE [options]
 If `OUTPUT` is omitted, the result is written next to the input as
 `paletti-<input-name>.png` (e.g. `paletti in.png -p pal.png` → `paletti-in.png`).
 
-The palette (`-p` / `--palette`) can be:
+Each palette source (`-p` / `--palette`) can be:
 
 - **an image** — its distinct colours become the palette
   (`-p palette.png`, optionally `--max-colors 16`);
 - **a JSON file** — `-p sweetie16.json`;
-- **an inline JSON array** — `-p '["#1a1c2c","#5d275d"]'`.
+- **an inline JSON array** — `-p '["#1a1c2c","#5d275d"]'`;
+- **a bare hex/name colour** — `-p 000`, `-p '#1a1c2c'`, `-p lavender`.
 
-JSON palettes accept hex strings (`"#1a1c2c"` or `"1a1c2c"`), `0..255` integer
-triples (`[26, 28, 44]`), or `0..1` float triples (`[0.1, 0.11, 0.17]`). The
-numeric range is detected automatically; override with `--palette-range`.
+`-p` is **repeatable and variadic**, and every source is concatenated into one
+palette. Repeat the flag or list sources after a single `-p`:
+
+```sh
+paletti in.png out.png -p 000 -p palette.json -p lospec-pal8.png
+paletti in.png out.png -p 000 palette.json lospec-pal8.png lavender
+```
+
+A bare colour token accepts any of:
+
+- **hex** — with or without a leading `#`, in 3- or 6-digit form (`000`, `#000`,
+  `1a1c2c`, `#1a1c2c`);
+- a **CSS/SVG colour name** — `white`, `lavender`, `rebeccapurple`;
+- a **CSS colour function** — `rgb()`, `hsl()`, `hsv()`/`hsb()`, `hwb()`,
+  `lab()`, `lch()`, `oklab()`, `oklch()`, in either the legacy comma form or the
+  modern space-separated CSS Color 4 syntax. Hue units (`deg`/`grad`/`rad`/
+  `turn`) and percentages are honoured; a trailing `/ alpha` is parsed and
+  ignored. Colours outside the sRGB gamut are clipped.
+
+```sh
+paletti in.png out.png -p 'rgb(255 0 0)' 'hsl(120deg 100% 50%)' 'oklch(0.7 0.15 30)'
+```
+
+(Quote any token containing spaces, `#`, or parentheses so the shell passes it
+through intact.) A token that names an existing file is read as that file, so
+files always win over same-named colours.
+
+JSON palettes accept the same hex strings, colour names and colour functions,
+plus `0..255` integer triples (`[26, 28, 44]`) or `0..1` float triples
+(`[0.1, 0.11, 0.17]`). The numeric range is detected automatically; override
+with `--palette-range`.
+
+Because a variadic `-p` greedily consumes the values that follow it, place it
+after the image paths (or before another flag).
 
 ### How the two nearest colours are combined
 
@@ -71,6 +103,13 @@ paletti photo.png out.png -p sweetie16.json \
 
 # Smooth two-tone blending with an inline palette
 paletti photo.png out.png -p '[[26,28,44],[244,244,244]]' --blend
+
+# Build a palette right on the command line (names or hex)
+paletti photo.png out.png -p white black
+paletti photo.png out.png -p sweetie16.json FFFFFF 000000  # palette + extra colours
+
+# Mix sources freely: a bare colour, a JSON file, an image, and a name
+paletti photo.png out.png -p 000 sweetie16.json lospec-pal8.png lavender
 
 # Per-channel ordered dithering to dissolve banding (Bayer or blue-noise)
 paletti photo.png out.png -p sweetie16.json --dither bayer --rgb --bayer 8
