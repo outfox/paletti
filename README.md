@@ -8,9 +8,10 @@
 
 `paletti` is a Python reinterpretation of the palette / dithering shader demonstrated in
 [Palette Shader 2](https://greenf0x.itch.io/paletteshader2) Godot 3 utility by [GreenF0x](https://greenf0x.itch.io/). 
+
 For each pixel it finds the two nearest palette colours and then snaps, blends, or ordered-dithers between them.
 
-Paletti does a bunch more, such as allow easily composed palettes and adjusting metrics and dithering patterns.
+Paletti does a bunch more, such as allow easily ad-hoc composed palettes and adjusting metrics and dithering patterns per color channel.
 
 The utility defaults to the OKLAB color space, enabling it to match perceptually similar colors.
 
