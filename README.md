@@ -135,7 +135,7 @@ By default each pixel snaps to its closest palette colour. Two flags change that
 `nearest`, `sine`, `bayer`, `halftone`, `texture`.
 
 ### Examples
-
+**A wonderful place to get appealing palettes is the [lospec](https://lospec.com/palette-list) palette list!**
 ```sh
 # Quantise to a palette extracted from an image
 paletti photo.png out.png -p lospec-palette.png
