@@ -1,18 +1,22 @@
+# Paletti - The Image Palette Chameleon
+
 <div align="center">
   <img src="docs/logo-paletti.png" alt="paletti logo" width="500">
 </div>
 
 <p align="center"><em>Apply colour palettes to images from the command line.</em></p>
 
-`paletti` is a Python port of the palette / dithering shaders from the
-`palette-shader-2` Godot project. For each pixel it finds the two nearest
+`paletti` is a Python reinterpretation of the palette / dithering shader demonstrated in
+[https://greenf0x.itch.io/paletteshader2](palette-shader-2) Godot 3 utility. For each pixel it finds the two nearest
 palette colours and then snaps, blends, or ordered-dithers between them.
+
+Paletti does a bunch more, such as allow easily composed palettes and adjusting metric.s
 
 ## Showcase
 
-`paletti` re-paints anything you give it — from 3D-rendered lighting to
-hand-drawn illustration to chunky pixel art. The clips below sweep a single
-source through a range of palettes and dither settings.
+`paletti` works on all kinds of source art — from chunky pixel art to
+3D-rendered lighting. The examples below run a source through a range of
+palettes and dither settings.
 
 <table>
   <tr>
@@ -31,10 +35,6 @@ source through a range of palettes and dither settings.
     <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" controls muted></video></td>
   </tr>
 </table>
-
-> Options that the current run doesn't use are reported as a `warning:` on
-> stderr (e.g. `--bayer` without `--dither`, `--hsv-weights` with `--metric rgb`)
-> rather than being silently ignored.
 
 ## Install / run
 
@@ -190,6 +190,10 @@ paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
   before matching, giving a free set of darker shades.
 
 Transparency in the source image is preserved.
+
+> Options that the current run doesn't use are reported as a `warning:` on
+> stderr (e.g. `--bayer` without `--dither`, `--hsv-weights` with `--metric rgb`)
+> rather than being silently ignored.
 
 ## Project layout
 
