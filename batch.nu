@@ -34,10 +34,10 @@ def main [
         let stem = ($p.f | path parse | get stem)
         let dst  = $"($out_dir)/($base)-($stem).png"
 
-        uv run paletti $p.g $dst -p $p.f 222 111 --dither texture --texture screentonesdf.png --scale 0.4 --antialias 0.3 --denoise 0.03 
+        #uv run paletti $p.g $dst -p $p.f --dither texture --rgb --texture stipple-unified.png --scale 0.006 --antialias 0.5 --denoise 0.03 
         # variants — swap in as needed:
-        # uv run paletti $p.g $"($out_dir)/($base)-($stem)-ehb.png" -p $p.f --dither texture --texture screentonesdf.png --scale 0.4 --antialias 0.3 --denoise 0.03 --extra-half-brite
-        # uv run paletti $p.g $dst -p $p.f --blend
+        #uv run paletti $p.g $"($out_dir)/($base)-($stem)-ehb.png" -p $p.f --dither texture --texture screentonesdf.png --scale 0.4 --antialias 0.3 --denoise 0.03 --extra-half-brite
+        uv run paletti $p.g $dst -p $p.f --blend
 
         # guaranteed-live alternative: uncomment, then remove the enumerate/each stage below.
         # print -e $"done  ($base)-($stem)"

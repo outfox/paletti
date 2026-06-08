@@ -202,14 +202,21 @@ def _make_field_rgb(opts: Options, h: int, w: int) -> np.ndarray:
     field is reused, rotated by 1/3 per channel to decorrelate the noise (that
     decorrelation is what dissolves banding in the hard 1-bit path).
     """
-    if opts.dither_kind == "texture" and opts.dither_texture is not None:
-        tex = np.asarray(opts.dither_texture, dtype=np.float64)
+    tex = opts.dither_texture
+    if opts.dither_kind == "texture" and tex is not None:
         if tex.ndim == 3 and tex.shape[-1] >= 3:
             rgb = tex[..., :3]
-            if rgb.max() > 1.0:
-                rgb = rgb / 255.0
-            # Treat as colour only if some pixel has a real channel spread.
-            if float(np.ptp(rgb, axis=-1).max()) > 1e-3:
+            # Treat as colour only if some pixel has a real channel spread. A
+            # dither texture is uniform in character, so a strided subsample
+            # (capped at ~256 per axis) settles this for a fraction of the cost
+            # of scanning every texel of a multi-megapixel pattern -- and lets us
+            # skip the full-array float64 copy entirely on the common grey path.
+            sy = max(1, rgb.shape[0] // 256)
+            sx = max(1, rgb.shape[1] // 256)
+            sample = np.asarray(rgb[::sy, ::sx], dtype=np.float64)
+            if sample.max() > 1.0:
+                sample = sample / 255.0
+            if float(np.ptp(sample, axis=-1).max()) > 1e-3:
                 field = dither.texture_field(h, w, rgb, scale=opts.dither_scale)
                 return field.reshape(-1, 3)
 

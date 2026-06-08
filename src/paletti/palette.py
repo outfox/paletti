@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -226,13 +225,20 @@ def from_image(path: str | Path, *, max_colors: int | None = None) -> np.ndarray
     img = Image.open(path).convert("RGB")
     pixels = np.asarray(img, dtype=np.uint8).reshape(-1, 3)
 
-    # Count occurrences of each unique colour, preserving frequency order.
-    counts = Counter(map(tuple, pixels))
-    ordered = [c for c, _ in counts.most_common()]
+    # Count occurrences of each unique colour, most-frequent first (ties broken
+    # by first appearance). Packing each RGB triple into a single uint32 turns
+    # this into one fast 1-D unique pass, rather than hashing millions of Python
+    # tuples through a Counter.
+    keys = (pixels[:, 0].astype(np.uint32) << 16
+            | pixels[:, 1].astype(np.uint32) << 8
+            | pixels[:, 2].astype(np.uint32))
+    _, first_idx, counts = np.unique(keys, return_index=True, return_counts=True)
+    order = np.lexsort((first_idx, -counts))  # -count primary, earliest-seen tie
+    ordered = pixels[first_idx[order]]
     if max_colors is not None:
         ordered = ordered[:max_colors]
 
-    return np.array(ordered, dtype=np.float64) / 255.0
+    return ordered.astype(np.float64) / 255.0
 
 
 def half_brite(pal: np.ndarray) -> np.ndarray:

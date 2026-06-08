@@ -1,10 +1,35 @@
-# paletti
+<div align="center">
+  <img src="docs/logo-paletti.png" alt="paletti logo" width="500">
+</div>
 
-Apply colour palettes to images from the command line.
+<p align="center"><em>Apply colour palettes to images from the command line.</em></p>
 
 `paletti` is a Python port of the palette / dithering shaders from the
 `palette-shader-2` Godot project. For each pixel it finds the two nearest
 palette colours and then snaps, blends, or ordered-dithers between them.
+
+## Showcase
+
+`paletti` re-paints anything you give it — from 3D-rendered lighting to
+hand-drawn illustration to chunky pixel art. The clips below sweep a single
+source through a range of palettes and dither settings.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><strong>Lighting</strong></td>
+    <td width="50%" align="center"><strong>Illustration</strong></td>
+  </tr>
+  <tr>
+    <td><video src="https://github.com/outfox/paletti/raw/main/docs/sample-spaceman.mp4" controls muted></video></td>
+    <td><video src="https://github.com/outfox/paletti/raw/main/docs/sample-wolf.mp4" controls muted></video></td>
+  </tr>
+</table>
+
+<p align="center"><strong>Pixel art</strong></p>
+
+<p align="center">
+  <img src="docs/sample-kenney.png" alt="Pixel art re-painted with paletti" width="760">
+</p>
 
 > Options that the current run doesn't use are reported as a `warning:` on
 > stderr (e.g. `--bayer` without `--dither`, `--hsv-weights` with `--metric rgb`)
