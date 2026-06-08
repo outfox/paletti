@@ -12,6 +12,8 @@ it finds the two nearest palette colours and then snaps, blends, or ordered-dith
 
 Paletti does a bunch more, such as allow easily composed palettes and adjusting metrics and dithering patterns.
 
+The utility defaults to the OKLAB color space, enabling it to match perceptually similar colors.
+
 ## Showcase
 
 `paletti` works on all kinds of source art — from chunky pixel art to
