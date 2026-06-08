@@ -12,14 +12,6 @@ wheels/
 # Virtual environments
 .venv
 
-palette-shader-2
-
 palettes
 input
 output
-*.png
-*.jpg
-*.jpeg
-*.webp
-*.pdn
-
