@@ -23,15 +23,6 @@ palettes and dither settings.
 
 <table>
   <tr>
-    <td width="50%" align="center"><strong>Use Case: Re-Lighting Art and Photos</strong></td>
-  </tr>
-  <tr>
-    <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" width="448" autoplay loop muted></video></td>
-  </tr>
-</table>
-
-<table>
-  <tr>
     <td width="50%" align="center"><strong>Use Case: Pixel Art Palette Swaps</strong></td>
   </tr>
   <tr>
@@ -55,6 +46,15 @@ palettes and dither settings.
   </tr>
   <tr>
     <td><img src="docs/sample-illustration-in.png" alt="Pixel art re-painted with paletti" width="224"><img src="docs/sample-illustration-out.png" alt="Pixel art re-painted with paletti" width="224"></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%" align="center"><strong>Use Case: Re-Lighting Art and Photos</strong></td>
+  </tr>
+  <tr>
+    <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" width="448" autoplay loop muted></video></td>
   </tr>
 </table>
 
