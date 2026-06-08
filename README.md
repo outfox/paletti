@@ -39,6 +39,16 @@ palettes and dither settings.
   </tr>
 </table>
 
+<table>
+  <tr>
+    <td width="50%" align="center"><strong>Use Case: SVG Recoloring</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/sample-svg-in.svg" alt="Logo for project 'Newtype'" width="224">
+    <img src="docs/sample-svg-out.svg" alt="Logo re-colored with paletti" width="224"></td>
+  </tr>
+</table>
+
 ## Install / run
 
 This is a [uv](https://docs.astral.sh/uv/) project:
@@ -55,7 +65,8 @@ paletti INPUT [OUTPUT] -p PALETTE [options]
 ```
 
 If `OUTPUT` is omitted, the result is written next to the input as
-`paletti-<input-name>.png` (e.g. `paletti in.png -p pal.png` → `paletti-in.png`).
+`paletti-<input-name>.png` (e.g. `paletti in.png -p pal.png` → `paletti-in.png`);
+an SVG input defaults to `paletti-<input-name>.svg` (see [SVG input](#svg-input)).
 
 Each palette source (`-p` / `--palette`) can be:
 
@@ -148,6 +159,27 @@ paletti photo.png out.png -p sweetie16.json --dither texture --rgb --texture blu
 paletti photo.png out.png -p sweetie16.json --metric hsv --hsv-weights 2,1,1
 ```
 
+### SVG input
+
+`paletti` accepts SVG inputs, rendered via [resvg](https://github.com/linebender/resvg).
+The **output extension** picks how the SVG is handled:
+
+- **a raster output** (`out.png`, …) **rasterizes** the SVG and runs the full
+  pixel pipeline — every mode, metric, and dither works as usual. SVGs have no
+  inherent resolution, so `--svg-scale N` renders `N`× larger for a crisper
+  result (it re-renders at the larger size rather than upscaling pixels);
+- **a `.svg` output keeps it vector**: each colour the SVG uses — `fill`,
+  `stroke`, gradient `stop-color`, and inline / `<style>` CSS — is snapped to its
+  nearest palette colour with the same matching logic, and the vectors are
+  written back unchanged. `none`, `currentColor`, and `url(#…)` references are
+  left as-is. Dither needs pixels, so it doesn't apply here (`--blend` does).
+
+```sh
+paletti logo.svg out.png -p sweetie16.json --svg-scale 8   # rasterize → PNG
+paletti logo.svg out.svg -p sweetie16.json                 # recolour, keep vector
+paletti logo.svg        -p sweetie16.json                  # → paletti-logo.svg (vector)
+```
+
 ### Other options
 
 - `--blur SIGMA` — Gaussian-blur the source (sigma in pixels) before
@@ -206,5 +238,6 @@ src/paletti/
   color.py      # vectorised rgb<->hsv (ports rgb2hsv / hsv2rgb)
   dither.py     # ordered-dither value sources (nearest/sine/bayer/texture)
   palette.py    # load palettes from images or JSON
-  imageio.py    # image load/save with alpha preservation
+  imageio.py    # image load/save with alpha preservation (incl. SVG rasterizing)
+  svg.py        # recolour an SVG's vector colours onto a palette (vector output)
 ```
