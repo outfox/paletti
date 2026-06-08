@@ -49,6 +49,15 @@ palettes and dither settings.
   </tr>
 </table>
 
+<table>
+  <tr>
+    <td width="50%" align="center"><strong>Use Case: Illustration Reshading</strong></td>
+  </tr>
+  <tr>
+    <td><video src="https://github.com/user-attachments/assets/4da35c85-21e3-435e-8269-831a2b9b4dfc" width="448" autoplay loop muted></video></td>
+  </tr>
+</table>
+
 ## Install / run
 
 This is a [uv](https://docs.astral.sh/uv/) project:
