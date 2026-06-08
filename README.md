@@ -15,12 +15,11 @@ hand-drawn illustration to chunky pixel art. The clips below sweep a single
 source through a range of palettes and dither settings.
 
 # Lighting Moods
-![Lighting Example](https://github.com/outfox/paletti/raw/main/docs/sample-spaceman.mp4)
-https://github.com/user-attachments/assets/4da35c85-21e3-435e-8269-831a2b9b4dfc
+![Lighting Example](https://github.com/user-attachments/assets/4da35c85-21e3-435e-8269-831a2b9b4dfc)
+
 
 # Reshading
-https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c
-![Cel Shaded Example]([https://github.com/outfox/paletti/raw/main/docs/sample-spaceman.mp4](https://github.com/outfox/paletti/raw/main/docs/sample-wolf.mp4))
+![Cel Shaded Example](https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c)
 
 <p align="center"><strong>Pixel art</strong></p>
 
