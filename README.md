@@ -14,12 +14,16 @@ palette colours and then snaps, blends, or ordered-dithers between them.
 hand-drawn illustration to chunky pixel art. The clips below sweep a single
 source through a range of palettes and dither settings.
 
-# Lighting Moods
-![Lighting Example](https://github.com/user-attachments/assets/4da35c85-21e3-435e-8269-831a2b9b4dfc)
-
-
-# Reshading
-![Cel Shaded Example](https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c)
+<table>
+  <tr>
+    <td width="50%" align="center"><strong>Lighting</strong></td>
+    <td width="50%" align="center"><strong>Illustration</strong></td>
+  </tr>
+  <tr>
+    <td><video src="https://github.com/user-attachments/assets/4da35c85-21e3-435e-8269-831a2b9b4dfc" controls muted></video></td>
+    <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" controls muted></video></td>
+  </tr>
+</table>
 
 <p align="center"><strong>Pixel art</strong></p>
 
