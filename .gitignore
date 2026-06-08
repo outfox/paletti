@@ -1,5 +1,5 @@
 # local batch test
-test.nu
+*.nu
 
 # Python-generated files
 __pycache__/
