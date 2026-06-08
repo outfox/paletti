@@ -14,16 +14,11 @@ palette colours and then snaps, blends, or ordered-dithers between them.
 hand-drawn illustration to chunky pixel art. The clips below sweep a single
 source through a range of palettes and dither settings.
 
-<table>
-  <tr>
-    <td width="50%" align="center"><strong>Lighting</strong></td>
-    <td width="50%" align="center"><strong>Illustration</strong></td>
-  </tr>
-  <tr>
-    <td><video src="https://github.com/outfox/paletti/raw/main/docs/sample-spaceman.mp4" controls muted></video></td>
-    <td><video src="https://github.com/outfox/paletti/raw/main/docs/sample-wolf.mp4" controls muted></video></td>
-  </tr>
-</table>
+# Lighting Moods
+![Lighting Example](https://github.com/outfox/paletti/raw/main/docs/sample-spaceman.mp4)
+
+# Reshading
+![Cel Shaded Example]([https://github.com/outfox/paletti/raw/main/docs/sample-spaceman.mp4](https://github.com/outfox/paletti/raw/main/docs/sample-wolf.mp4))
 
 <p align="center"><strong>Pixel art</strong></p>
 
