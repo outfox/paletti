@@ -54,7 +54,7 @@ palettes and dither settings.
     <td width="50%" align="center"><strong>Use Case: Illustrative Reshading / Dithering</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/sample-illustration.png" alt="Pixel art re-painted with paletti" width="448"></td>
+    <td><img src="docs/sample-illustration-in.png" alt="Pixel art re-painted with paletti" width="224"><img src="docs/sample-illustration-out.png" alt="Pixel art re-painted with paletti" width="224"></td>
   </tr>
 </table>
 
