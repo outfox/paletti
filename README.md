@@ -1,9 +1,9 @@
-# Paletti - The Image Palette Chameleon
 
 <div align="center">
   <img src="docs/logo-paletti.png" alt="paletti logo" width="500">
 </div>
 
+<h1 align="center">Paletti - The Image Chameleon</h1>
 <p align="center"><em>Apply colour palettes to images from the command line.</em></p>
 
 `paletti` is a Python reinterpretation of the palette / dithering shader demonstrated in
