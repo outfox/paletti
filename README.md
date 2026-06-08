@@ -51,10 +51,10 @@ palettes and dither settings.
 
 <table>
   <tr>
-    <td width="50%" align="center"><strong>Use Case: Illustration Reshading</strong></td>
+    <td width="50%" align="center"><strong>Use Case: Illustrative Reshading / Dithering</strong></td>
   </tr>
   <tr>
-    <td><video src="https://github.com/user-attachments/assets/4da35c85-21e3-435e-8269-831a2b9b4dfc" width="448" autoplay loop muted></video></td>
+    <td><img src="docs/sample-illustration.png" alt="Pixel art re-painted with paletti" width="448"></td>
   </tr>
 </table>
 
