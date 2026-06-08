@@ -20,19 +20,19 @@ palettes and dither settings.
 
 <table>
   <tr>
-    <td width="50%" align="center"><strong>Pixel Art</strong></td>
+    <td width="50%" align="center"><strong>Use Case: Re-Lighting</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/sample-kenney.png" alt="Pixel art re-painted with paletti" width="760"></td>
+    <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" controls muted></video></td>
   </tr>
 </table>
 
 <table>
   <tr>
-    <td width="50%" align="center"><strong>Use Case: Re-Lighting</strong></td>
+    <td width="50%" align="center"><strong>Pixel Art</strong></td>
   </tr>
   <tr>
-    <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" controls muted></video></td>
+    <td><img src="docs/sample-kenney.png" alt="Pixel art re-painted with paletti" width="380"></td>
   </tr>
 </table>
 
