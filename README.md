@@ -14,18 +14,12 @@ palette colours and then snaps, blends, or ordered-dithers between them.
 hand-drawn illustration to chunky pixel art. The clips below sweep a single
 source through a range of palettes and dither settings.
 
-<p align="center"><strong>Pixel art</strong></p>
-
-<p align="center">
-  <img src="docs/sample-kenney.png" alt="Pixel art re-painted with paletti" width="760">
-</p>
-
 <table>
   <tr>
-    <td width="50%" align="center"><strong>Use Case: Illustration</strong></td>
+    <td width="50%" align="center"><strong>Pixel Art</strong></td>
   </tr>
   <tr>
-    <td><video src="https://github.com/user-attachments/assets/4da35c85-21e3-435e-8269-831a2b9b4dfc" controls muted></video></td>
+    <td><img src="docs/sample-kenney.png" alt="Pixel art re-painted with paletti" width="760"></td>
   </tr>
 </table>
 
