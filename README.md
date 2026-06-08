@@ -23,7 +23,7 @@ palettes and dither settings.
     <td width="50%" align="center"><strong>Use Case: Re-Lighting Art and Photos</strong></td>
   </tr>
   <tr>
-    <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" muted></video></td>
+    <td><video src="https://github.com/user-attachments/assets/5f70a718-7602-44a9-a1f6-e6cda5a2658c" play muted></video></td>
   </tr>
 </table>
 
