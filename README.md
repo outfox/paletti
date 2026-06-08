@@ -32,7 +32,7 @@ palettes and dither settings.
     <td width="50%" align="center"><strong>Use Case: Pixel Art Palette Swaps</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/sample-kenney.png" alt="Pixel art re-painted with paletti" width="380"></td>
+    <td><img src="docs/sample-kenney.png" alt="Pixel art re-painted with paletti" width="448"></td>
   </tr>
 </table>
 
