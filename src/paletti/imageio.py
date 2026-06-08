@@ -2,19 +2,47 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
 
-def load_rgb(path: str | Path) -> tuple[np.ndarray, np.ndarray | None]:
+def _rasterize_svg(path: str | Path, scale: float = 1.0) -> Image.Image:
+    """Render an SVG file to a Pillow image via resvg.
+
+    SVGs are resolution-independent, so the renderer uses the document's
+    intrinsic ``width``/``height`` (or ``viewBox``) size. ``scale`` multiplies
+    that: rather than upscaling a small raster, it re-renders at the larger size
+    so the result stays crisp.
+    """
+    import resvg_py  # lazy: only needed when an SVG is actually loaded
+
+    p = str(path)
+    png = resvg_py.svg_to_bytes(svg_path=p)
+    img = Image.open(io.BytesIO(png))
+    if scale and scale != 1.0:
+        width = max(1, round(img.width * scale))
+        png = resvg_py.svg_to_bytes(svg_path=p, width=width)
+        img = Image.open(io.BytesIO(png))
+    return img
+
+
+def load_rgb(path: str | Path,
+             svg_scale: float = 1.0) -> tuple[np.ndarray, np.ndarray | None]:
     """Load an image as ``(H, W, 3)`` float RGB in ``[0, 1]``.
 
     Returns ``(rgb, alpha)`` where ``alpha`` is an ``(H, W)`` float array in
-    ``[0, 1]`` if the source had transparency, otherwise ``None``.
+    ``[0, 1]`` if the source had transparency, otherwise ``None``. ``.svg``
+    inputs are rasterized first (at ``svg_scale``x their intrinsic size); the
+    renderer emits RGBA, so transparency flows through the same path as any
+    other source.
     """
-    img = Image.open(path)
+    if Path(path).suffix.lower() == ".svg":
+        img = _rasterize_svg(path, svg_scale)
+    else:
+        img = Image.open(path)
     alpha = None
     if img.mode in ("RGBA", "LA", "PA") or (
         img.mode == "P" and "transparency" in img.info

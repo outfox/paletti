@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from paletti import color, core, dither, imageio
+from paletti import color, core, dither, imageio, svg
 from paletti import palette as palette_mod
 
 
@@ -675,3 +675,141 @@ def test_cli_denoise_runs_without_warning(tmp_path):
     assert result.exit_code == 0, result.output
     assert out.exists()
     assert "ignored" not in result.stderr
+
+
+# --- svg -------------------------------------------------------------------
+
+_SVG = """<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="4" height="2" viewBox="0 0 4 2">
+  <defs>
+    <linearGradient id="g">
+      <stop offset="0" stop-color="#101010"/>
+      <stop offset="1" stop-color="lime"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="2" height="2" fill="#ff0000" stroke="white"/>
+  <rect x="2" y="0" width="2" height="2" style="fill:#0000ff;stroke:none"/>
+  <rect x="0" y="0" width="1" height="1" fill="none"/>
+  <rect x="1" y="0" width="1" height="1" fill="url(#g)"/>
+</svg>
+"""
+
+# Black/white/red/green/blue: every colour in _SVG snaps to one of these.
+_SVG_PAL = np.array([[0, 0, 0], [1, 1, 1], [1, 0, 0],
+                     [0, 1, 0], [0, 0, 1]], dtype=float)
+
+
+def _write_svg(tmp_path):
+    p = tmp_path / "in.svg"
+    p.write_text(_SVG, encoding="utf-8")
+    return p
+
+
+def test_svg_rasterizes_through_load_rgb(tmp_path):
+    # An SVG input decodes via the same load_rgb path, RGBA preserved.
+    rgb, alpha = imageio.load_rgb(_write_svg(tmp_path))
+    assert rgb.shape == (2, 4, 3)
+    assert alpha is not None and alpha.shape == (2, 4)
+    # Top-left quad is solid red, top-right quad solid blue (resvg renders them).
+    assert np.allclose(rgb[0, 0], [1, 0, 0], atol=1 / 255)
+    assert np.allclose(rgb[0, 3], [0, 0, 1], atol=1 / 255)
+
+
+def test_svg_scale_renders_larger(tmp_path):
+    rgb, _ = imageio.load_rgb(_write_svg(tmp_path), svg_scale=4.0)
+    assert rgb.shape == (8, 16, 3)  # 4x the intrinsic 4x2
+
+
+def test_svg_recolor_snaps_and_preserves_structure(tmp_path):
+    out = tmp_path / "out.svg"
+    mapping = svg.recolor(_write_svg(tmp_path), out, _SVG_PAL,
+                          core.Options(mode="nearest"))
+    text = out.read_text(encoding="utf-8")
+
+    # Real colours snapped to their nearest palette hex...
+    assert mapping["#ff0000"] == "#ff0000"
+    assert mapping["white"] == "#ffffff"
+    assert mapping["#0000ff"] == "#0000ff"
+    assert mapping["lime"] == "#00ff00"      # CSS name -> green
+    assert mapping["#101010"] == "#000000"   # near-black -> black
+    # ...via presentation attrs, style="", and gradient stops.
+    assert 'fill="#ff0000"' in text
+    assert "fill:#0000ff" in text
+    assert 'stop-color="#00ff00"' in text
+
+    # Non-colours are left exactly as they were, structure intact.
+    assert 'fill="none"' in text
+    assert 'fill="url(#g)"' in text
+    assert "none" not in mapping and "url(#g)" not in mapping
+    # Still valid, parseable SVG.
+    import xml.etree.ElementTree as ET
+    ET.fromstring(text)
+
+
+def test_svg_recolor_blend_stays_on_segment(tmp_path):
+    # blend is valid for vector output (one flat colour per swatch); a mid-grey
+    # between black and white snaps onto the black/white segment.
+    src = tmp_path / "g.svg"
+    src.write_text('<svg xmlns="http://www.w3.org/2000/svg">'
+                   '<rect fill="#808080"/></svg>', encoding="utf-8")
+    out = tmp_path / "g_out.svg"
+    pal = np.array([[0, 0, 0], [1, 1, 1]], dtype=float)
+    mapping = svg.recolor(src, out, pal, core.Options(mode="blend"))
+    # Blended toward the midpoint, not hard-snapped to either endpoint.
+    assert mapping["#808080"] not in ("#000000", "#ffffff")
+
+
+def _run_cli_svg(tmp_path, out_name, *extra):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = _write_svg(tmp_path)
+    out = tmp_path / out_name
+    argv = [str(inp), str(out), "-p", "000000", "ffffff", "ff0000",
+            "00ff00", "0000ff", *extra]
+    return CliRunner().invoke(main, argv), out
+
+
+def test_cli_svg_to_svg_recolours_vector(tmp_path):
+    result, out = _run_cli_svg(tmp_path, "out.svg")
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    text = out.read_text(encoding="utf-8")
+    assert "<svg" in text and 'fill="none"' in text
+
+
+def test_cli_svg_to_png_rasterizes(tmp_path):
+    result, out = _run_cli_svg(tmp_path, "out.png")
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    assert Image.open(out).size == (4, 2)
+
+
+def test_cli_svg_default_output_is_svg(tmp_path):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = _write_svg(tmp_path)
+    result = CliRunner().invoke(main, [str(inp), "-p", "000000", "ffffff"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "paletti-in.svg").exists()
+
+
+def test_cli_svg_output_requires_svg_input(tmp_path):
+    from click.testing import CliRunner
+    from paletti.cli import main
+
+    inp = tmp_path / "in.png"
+    Image.fromarray((_img() * 255).astype(np.uint8), "RGB").save(inp)
+    out = tmp_path / "out.svg"
+    result = CliRunner().invoke(
+        main, [str(inp), str(out), "-p", "000000", "ffffff"])
+    assert result.exit_code != 0
+    assert "requires an SVG input" in result.output
+
+
+def test_cli_svg_dither_falls_back_to_nearest(tmp_path):
+    result, out = _run_cli_svg(tmp_path, "out.svg", "--dither", "bayer")
+    assert result.exit_code == 0, result.output
+    assert "snapping to nearest" in result.stderr
+    assert "(nearest/" in result.output

@@ -12,6 +12,7 @@ dependencies = [
     "colour-science>=0.4.7",
     "numpy>=2.4.6",
     "pillow>=12.2.0",
+    "resvg-py>=0.3.2",
     "scikit-image>=0.25.0",
     "scipy>=1.11",
 ]

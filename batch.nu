@@ -15,7 +15,7 @@ def main [
     --out-dir: string = "output/add"  # output directory
     --threads: int = 16               # parallel workers
 ] {
-    let inputs   = (glob $"($in_dir)/*.{jpeg,png,webp,jpg}")
+    let inputs   = (glob $"($in_dir)/*.{jpeg,png,webp,jpg,svg}")
     let palettes = (glob $"($pal_dir)/*.{jpeg,png,webp,jpg}")
 
     if ($inputs   | is-empty) { error make { msg: $"no input images in '($in_dir)'" } }
@@ -32,7 +32,7 @@ def main [
     | par-each --threads $threads { |p|
         let base = ($p.g | path parse | get stem)
         let stem = ($p.f | path parse | get stem)
-        let dst  = $"($out_dir)/($base)-($stem).png"
+        let dst  = $"($out_dir)/($base)-($stem).svg"
 
         #uv run paletti $p.g $dst -p $p.f --dither texture --rgb --texture stipple-unified.png --scale 0.006 --antialias 0.5 --denoise 0.03 
         # variants — swap in as needed:

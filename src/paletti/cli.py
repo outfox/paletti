@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 import numpy as np
 
-from . import core, imageio, palette as palette_mod
+from . import core, imageio, palette as palette_mod, svg as svg_mod
 from .core import DITHER_KINDS, METRICS
 
 
@@ -186,11 +186,16 @@ def _warn_unused(ctx, *, mode, dither_kind, metric, palette_specs):
               metavar="H,S,V",
               help="Pre-shift hue (add) and scale sat/val (multiply) before "
                    "matching. Identity is 0,1,1.")
+@click.option("--svg-scale", type=float, default=1.0, show_default=True,
+              help="When the input is an SVG rasterized to a raster output, "
+                   "render it this many times larger (e.g. 4 for 4x). Vector "
+                   "SVGs have no inherent resolution, so bump this for a crisper "
+                   "result. Ignored for non-SVG inputs and for .svg output.")
 @click.pass_context
 def main(ctx, input_image, output_image, palette_specs, blend,
          dither_kind, rgb, metric, blur, denoise, max_colors, palette_range,
          extra_half_brite, res, bayer, angle, texture, scale, antialias,
-         prefer_smallest, hsv_weights, hsv_adjust):
+         prefer_smallest, hsv_weights, hsv_adjust, svg_scale):
     """Apply a colour PALETTE to an image.
 
     By default, each pixel snaps to its nearest palette colour. Use --blend for a
@@ -198,7 +203,12 @@ def main(ctx, input_image, output_image, palette_specs, blend,
     between them (add --rgb to dither each channel independently).
 
     If OUTPUT_IMAGE is omitted, the result is written next to the input as
-    "paletti-<input-name>.png".
+    "paletti-<input-name>.png" (or ".svg" for an SVG input).
+
+    SVG inputs are supported two ways, chosen by the output extension: a raster
+    output rasterizes the SVG and runs the full pixel pipeline, while a .svg
+    output snaps each colour the SVG uses to the nearest palette colour and
+    keeps it vector (dither does not apply there).
 
     \b
     Examples:
@@ -207,6 +217,8 @@ def main(ctx, input_image, output_image, palette_specs, blend,
       paletti in.png out.png -p '[[26,28,44],[93,39,93]]' --blend
       paletti in.png out.png -p 000 pal.json lospec.png lavender  # mixed sources
       paletti in.png out.png -p base.json FFFFFF 000000  # augment a palette
+      paletti logo.svg out.png -p sweetie16.json --svg-scale 8  # rasterize
+      paletti logo.svg out.svg -p sweetie16.json       # recolour, keep vector
     """
     if blend and dither_kind:
         raise click.ClickException("--blend and --dither are mutually exclusive")
@@ -225,8 +237,27 @@ def main(ctx, input_image, output_image, palette_specs, blend,
     _warn_unused(ctx, mode=mode, dither_kind=dither_kind, metric=metric,
                  palette_specs=palette_specs)
 
+    # An SVG input round-trips to SVG by default; everything else defaults to
+    # PNG. The output extension then picks the path: a .svg output recolours the
+    # vectors in place, any raster extension rasterizes and runs the pixel
+    # pipeline. (A non-SVG default keeps existing behaviour unchanged.)
+    input_is_svg = input_image.suffix.lower() == ".svg"
     if output_image is None:
-        output_image = input_image.with_name(f"paletti-{input_image.stem}.png")
+        suffix = ".svg" if input_is_svg else ".png"
+        output_image = input_image.with_name(f"paletti-{input_image.stem}{suffix}")
+
+    produce_svg = output_image.suffix.lower() == ".svg"
+    if produce_svg and not input_is_svg:
+        raise click.ClickException("SVG (vector) output requires an SVG input")
+    if produce_svg and mode in ("dither", "dither-rgb"):
+        click.echo("warning: dither has no meaning for vector SVG output; "
+                   "snapping to nearest instead", err=True)
+        mode = "nearest"
+    if (ctx.get_parameter_source("svg_scale")
+            == click.core.ParameterSource.COMMANDLINE
+            and (produce_svg or not input_is_svg)):
+        why = "vector .svg output" if produce_svg else "input is not an SVG"
+        click.echo(f"warning: --svg-scale ignored ({why})", err=True)
 
     # Build the palette from every -p source, in order.
     parts = []
@@ -244,8 +275,6 @@ def main(ctx, input_image, output_image, palette_specs, blend,
 
     if extra_half_brite:
         pal = palette_mod.half_brite(pal)
-
-    image_rgb, alpha = imageio.load_rgb(input_image)
 
     tex = None
     if texture is not None:
@@ -276,11 +305,15 @@ def main(ctx, input_image, output_image, palette_specs, blend,
     )
 
     try:
-        out = core.apply(image_rgb, pal, opts)
-    except ValueError as exc:
+        if produce_svg:
+            # Snap the SVG's own colours onto the palette, keeping it vector.
+            svg_mod.recolor(input_image, output_image, pal, opts)
+        else:
+            image_rgb, alpha = imageio.load_rgb(input_image, svg_scale=svg_scale)
+            out = core.apply(image_rgb, pal, opts)
+            imageio.save_rgb(output_image, out, alpha)
+    except (OSError, ValueError) as exc:
         raise click.ClickException(str(exc))
-
-    imageio.save_rgb(output_image, out, alpha)
 
     click.echo(
         f"Applied {pal.shape[0]}-colour palette ({mode}/{metric}) "
